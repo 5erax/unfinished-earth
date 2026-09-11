@@ -14,7 +14,9 @@ Game hướng đến chơi solo và co-op PvE trong các thế giới riêng, v�
 
 **Giai đoạn thiết kế tiền sản xuất. Chưa có game có thể chơi, mã nguồn gameplay hoặc số liệu benchmark.**
 
-Repository được tạo trước bộ Game Design Bible để thống nhất mô tả dự án, cách tổ chức và lịch sử các quyết định. Các con số về quy mô, hiệu năng và tiến độ trong tài liệu sau này là mục tiêu hoặc giả định cần kiểm chứng.
+Game Design Bible v0.1 gồm 117 mục, 20 tình huống phát sinh, bản đồ tương tác hệ thống, phạm vi MVP và kế hoạch kiểm chứng. Các con số về quy mô, hiệu năng và tiến độ là mục tiêu hoặc giả định cần thử nghiệm, chưa phải kết quả đo.
+
+Repository và README được công bố ở commit khởi tạo trước khi viết tài liệu chi tiết.
 
 ## Hướng thiết kế
 
@@ -33,12 +35,18 @@ Persistence không đồng nghĩa với mô phỏng mọi cá thể toàn thời
 | `README.md` | Giới thiệu dự án bằng tiếng Việt |
 | `README.en.md` | English project overview |
 | `docs/README.md` | Điểm bắt đầu và chỉ mục bộ tài liệu |
+| `docs/01-vision-and-player.md` | Tầm nhìn, nhân vật, xây dựng và hậu cần |
+| `docs/02-world-and-ecology.md` | Thế giới, nước, hệ sinh thái và tài nguyên |
+| `docs/03-society-and-knowledge.md` | NPC, cộng đồng, kinh tế và tri thức |
+| `docs/04-persistence-and-production.md` | Co-op, offline, kiến trúc và kế hoạch sản xuất |
+| `docs/05-scenarios-and-validation.md` | Kịch bản, quyết định và tiêu chí kiểm chứng |
+| `exports/` | Bản tài liệu tổng hợp để đọc và chia sẻ |
 | `CONTRIBUTING.md` | Quy tắc đề xuất và sửa thiết kế |
 | `CHANGELOG.md` | Lịch sử các mốc tài liệu |
 
 ## Bước tiếp theo
 
-Xây Game Design Bible, xác định các giả định có ảnh hưởng lớn, chốt phạm vi MVP và tiêu chí kiểm chứng trước khi quyết định triển khai game.
+Đọc [phạm vi MVP](docs/04-persistence-and-production.md#99-mvp-scope), kiểm tra giả định nhân lực và làm prototype một vùng. Chuỗi cần chứng minh: xây dựng → nước/đường → nguồn thức ăn → quyết định NPC → lịch sử. Mã nguồn game sẽ được bắt đầu sau bước chốt nguồn lực và thử kiến trúc.
 
 ## Quyền sử dụng
 

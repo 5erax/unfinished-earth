@@ -1,19 +1,151 @@
-# Tài liệu thiết kế The Unfinished Earth
+# Game Design Bible v0.1
 
-## Trạng thái
+The Unfinished Earth là dự án sandbox co-op PvE trên web. Bộ tài liệu này chuyển concept thành các quy tắc hệ thống, phạm vi prototype và tiêu chí kiểm chứng. Tài liệu chưa xác nhận tính năng đã triển khai hoặc hiệu năng đã đo.
 
-Repository và phần giới thiệu được khởi tạo trước khi viết Game Design Bible, theo thứ tự thực hiện của dự án. Bộ tài liệu chi tiết sẽ được bổ sung ở commit tiếp theo.
+[Giới thiệu dự án](../README.md) · [Bản Word](../exports/The-Unfinished-Earth-Game-Design-Bible-v0.1.docx) · [Bản Markdown tổng hợp](../exports/Game-Design-Bible-v0.1.md)
 
-## Quy ước tài liệu
+## Đọc theo chương
 
-Tiếng Việt là ngôn ngữ chính; thuật ngữ tiếng Anh được giữ khi cần giao tiếp giữa các chuyên môn. Mỗi hệ thống lớn cần mô tả mục đích, trải nghiệm, quy tắc, dữ liệu vào/ra, tương tác, hành động của người chơi/NPC, mô phỏng, offline, thất bại, kết quả phát sinh, UI, chi phí hiệu năng, ngoại lệ và hướng mở rộng.
+| Chương | Phạm vi |
+| --- | --- |
+| [01 Tầm nhìn và trải nghiệm người chơi](01-vision-and-player.md) | 1–27 |
+| [02 Thế giới và sinh thái](02-world-and-ecology.md) | 28–44 |
+| [03 NPC xã hội và tri thức](03-society-and-knowledge.md) | 45–74 |
+| [04 Persistence và kế hoạch sản xuất](04-persistence-and-production.md) | 75–108 |
+| [05 Kịch bản và kiểm chứng](05-scenarios-and-validation.md) | 109–117 cùng phụ lục |
 
-`ASSUMPTION` đánh dấu quyết định có ảnh hưởng lớn cần được kiểm chứng. Phạm vi phải phân biệt rõ MVP, giai đoạn sau MVP và ý tưởng dài hạn. Tài liệu mô tả thiết kế dự kiến, không xác nhận tính năng đã được xây dựng.
+## Quyết định nền tảng
 
-## Luồng đọc dự kiến
+MVP giới hạn ở một vùng 512 × 512 m, hai làng, một phế tích và một chuỗi xây dựng–nước/đường–thức ăn–NPC–lịch sử. Một nhóm có một homestead được bảo hộ thường trực. Khi cả nhóm vắng, world tiến tối đa 72 giờ thực rồi ngủ đông; sản xuất tại nhà còn bị giới hạn bởi credit, nguồn lực và logistics.
 
-1. Tổng quan và quyết định nền tảng.
-2. Trải nghiệm nhân vật và các hệ thống xây dựng.
-3. Sinh thái, NPC và nền văn minh.
-4. Co-op, offline, lưu trữ và kiến trúc kỹ thuật.
-5. Phạm vi sản xuất, rủi ro, tiêu chí kiểm chứng và các kịch bản phát sinh.
+`ASSUMPTION` đánh dấu lựa chọn cần kiểm chứng. Mỗi hệ thống lớn có hợp đồng 16 nội dung: Purpose, Player Experience, Core Rules, Inputs, Outputs, Interactions With Other Systems, Player Actions, NPC Actions, Simulation Logic, Offline Behavior, Failure States, Emergent Outcomes, UI Presentation, Performance Considerations, Edge Cases và Future Expansion. Các hệ thống con nêu rõ hợp đồng kế thừa và phần quy tắc bổ sung.
+
+Tiếng Việt là ngôn ngữ chính. Các chương Markdown là nguồn chỉnh sửa chuẩn; bản tổng hợp và Word được xuất từ cùng năm chương. Khi đổi một quy tắc, cập nhật cả quyết định, ví dụ và tiêu chí liên quan.
+
+## Mục lục 117 phần
+
+- [1. Executive Summary](01-vision-and-player.md#1-executive-summary)
+- [2. High Concept](01-vision-and-player.md#2-high-concept)
+- [3. Game Vision](01-vision-and-player.md#3-game-vision)
+- [4. Design Pillars](01-vision-and-player.md#4-design-pillars)
+- [5. Player Fantasy](01-vision-and-player.md#5-player-fantasy)
+- [6. Target Audience](01-vision-and-player.md#6-target-audience)
+- [7. Platform Strategy](01-vision-and-player.md#7-platform-strategy)
+- [8. Core Gameplay Loop](01-vision-and-player.md#8-core-gameplay-loop)
+- [9. Short / Mid / Long-Term Gameplay Loop](01-vision-and-player.md#9-short--mid--long-term-gameplay-loop)
+- [10. Camera & Controls](01-vision-and-player.md#10-camera--controls)
+- [11. Character System](01-vision-and-player.md#11-character-system)
+- [12. Player Progression](01-vision-and-player.md#12-player-progression)
+- [13. Death & Legacy](01-vision-and-player.md#13-death--legacy)
+- [14. Survival System](01-vision-and-player.md#14-survival-system)
+- [15. Combat System](01-vision-and-player.md#15-combat-system)
+- [16. Injury System](01-vision-and-player.md#16-injury-system)
+- [17. Inventory System](01-vision-and-player.md#17-inventory-system)
+- [18. Item System](01-vision-and-player.md#18-item-system)
+- [19. Crafting System](01-vision-and-player.md#19-crafting-system)
+- [20. Building System](01-vision-and-player.md#20-building-system)
+- [21. Terraforming](01-vision-and-player.md#21-terraforming)
+- [22. Infrastructure](01-vision-and-player.md#22-infrastructure)
+- [23. Electricity](01-vision-and-player.md#23-electricity)
+- [24. Logistics](01-vision-and-player.md#24-logistics)
+- [25. Transportation](01-vision-and-player.md#25-transportation)
+- [26. Exploration](01-vision-and-player.md#26-exploration)
+- [27. Map & Information System](01-vision-and-player.md#27-map--information-system)
+- [28. Procedural World Generation](02-world-and-ecology.md#28-procedural-world-generation)
+- [29. Region System](02-world-and-ecology.md#29-region-system)
+- [30. Climate Simulation](02-world-and-ecology.md#30-climate-simulation)
+- [31. Weather](02-world-and-ecology.md#31-weather)
+- [32. Seasons](02-world-and-ecology.md#32-seasons)
+- [33. Natural Disasters](02-world-and-ecology.md#33-natural-disasters)
+- [34. Water Simulation](02-world-and-ecology.md#34-water-simulation)
+- [35. Ecosystem Simulation](02-world-and-ecology.md#35-ecosystem-simulation)
+- [36. Vegetation](02-world-and-ecology.md#36-vegetation)
+- [37. Wildlife](02-world-and-ecology.md#37-wildlife)
+- [38. Food Chain](02-world-and-ecology.md#38-food-chain)
+- [39. Migration](02-world-and-ecology.md#39-migration)
+- [40. Extinction](02-world-and-ecology.md#40-extinction)
+- [41. Evolution / Mutation](02-world-and-ecology.md#41-evolution--mutation)
+- [42. Resources](02-world-and-ecology.md#42-resources)
+- [43. Pollution](02-world-and-ecology.md#43-pollution)
+- [44. Environmental Consequences](02-world-and-ecology.md#44-environmental-consequences)
+- [45. NPC Architecture](03-society-and-knowledge.md#45-npc-architecture)
+- [46. NPC Personality](03-society-and-knowledge.md#46-npc-personality)
+- [47. NPC Needs](03-society-and-knowledge.md#47-npc-needs)
+- [48. NPC Memories](03-society-and-knowledge.md#48-npc-memories)
+- [49. NPC Relationships](03-society-and-knowledge.md#49-npc-relationships)
+- [50. NPC Careers](03-society-and-knowledge.md#50-npc-careers)
+- [51. NPC Aging](03-society-and-knowledge.md#51-npc-aging)
+- [52. NPC Population Simulation](03-society-and-knowledge.md#52-npc-population-simulation)
+- [53. Simulation LOD](03-society-and-knowledge.md#53-simulation-lod)
+- [54. Settlement System](03-society-and-knowledge.md#54-settlement-system)
+- [55. Settlement Growth](03-society-and-knowledge.md#55-settlement-growth)
+- [56. Settlement Collapse](03-society-and-knowledge.md#56-settlement-collapse)
+- [57. Player Settlements](03-society-and-knowledge.md#57-player-settlements)
+- [58. Governance](03-society-and-knowledge.md#58-governance)
+- [59. Factions](03-society-and-knowledge.md#59-factions)
+- [60. Territory](03-society-and-knowledge.md#60-territory)
+- [61. Diplomacy](03-society-and-knowledge.md#61-diplomacy)
+- [62. War](03-society-and-knowledge.md#62-war)
+- [63. Economy](03-society-and-knowledge.md#63-economy)
+- [64. Trade](03-society-and-knowledge.md#64-trade)
+- [65. Dynamic Prices](03-society-and-knowledge.md#65-dynamic-prices)
+- [66. Emergent Quest System](03-society-and-knowledge.md#66-emergent-quest-system)
+- [67. Authored Narrative](03-society-and-knowledge.md#67-authored-narrative)
+- [68. Apocalypse Mystery](03-society-and-knowledge.md#68-apocalypse-mystery)
+- [69. Ruins](03-society-and-knowledge.md#69-ruins)
+- [70. POI Evolution](03-society-and-knowledge.md#70-poi-evolution)
+- [71. Knowledge System](03-society-and-knowledge.md#71-knowledge-system)
+- [72. Technology](03-society-and-knowledge.md#72-technology)
+- [73. Lost Technology](03-society-and-knowledge.md#73-lost-technology)
+- [74. Research](03-society-and-knowledge.md#74-research)
+- [75. Co-op](04-persistence-and-production.md#75-co-op)
+- [76. PvP Options](04-persistence-and-production.md#76-pvp-options)
+- [77. Offline Protection](04-persistence-and-production.md#77-offline-protection)
+- [78. Persistent Simulation](04-persistence-and-production.md#78-persistent-simulation)
+- [79. World Chronicle](04-persistence-and-production.md#79-world-chronicle)
+- [80. Procedural History](04-persistence-and-production.md#80-procedural-history)
+- [81. Player-Made History](04-persistence-and-production.md#81-player-made-history)
+- [82. Mega Projects](04-persistence-and-production.md#82-mega-projects)
+- [83. Endgame](04-persistence-and-production.md#83-endgame)
+- [84. Infinite / Long-Term Gameplay](04-persistence-and-production.md#84-infinite--long-term-gameplay)
+- [85. UI/UX](04-persistence-and-production.md#85-uiux)
+- [86. Accessibility](04-persistence-and-production.md#86-accessibility)
+- [87. Audio Direction](04-persistence-and-production.md#87-audio-direction)
+- [88. Visual Direction](04-persistence-and-production.md#88-visual-direction)
+- [89. Technical Architecture Proposal](04-persistence-and-production.md#89-technical-architecture-proposal)
+- [90. Server Architecture](04-persistence-and-production.md#90-server-architecture)
+- [91. Persistence Model](04-persistence-and-production.md#91-persistence-model)
+- [92. Simulation Scheduling](04-persistence-and-production.md#92-simulation-scheduling)
+- [93. Multiplayer Synchronization](04-persistence-and-production.md#93-multiplayer-synchronization)
+- [94. Performance Strategy](04-persistence-and-production.md#94-performance-strategy)
+- [95. Anti-Cheat Considerations](04-persistence-and-production.md#95-anti-cheat-considerations)
+- [96. Modding Architecture](04-persistence-and-production.md#96-modding-architecture)
+- [97. Server Configuration](04-persistence-and-production.md#97-server-configuration)
+- [98. Content Pipeline](04-persistence-and-production.md#98-content-pipeline)
+- [99. MVP Scope](04-persistence-and-production.md#99-mvp-scope)
+- [100. Vertical Slice](04-persistence-and-production.md#100-vertical-slice)
+- [101. Alpha Scope](04-persistence-and-production.md#101-alpha-scope)
+- [102. Beta Scope](04-persistence-and-production.md#102-beta-scope)
+- [103. Version 1.0 Scope](04-persistence-and-production.md#103-version-10-scope)
+- [104. Post-Launch Expansion](04-persistence-and-production.md#104-post-launch-expansion)
+- [105. Technical Risks](04-persistence-and-production.md#105-technical-risks)
+- [106. Design Risks](04-persistence-and-production.md#106-design-risks)
+- [107. Scope Risks](04-persistence-and-production.md#107-scope-risks)
+- [108. Risk Mitigation](04-persistence-and-production.md#108-risk-mitigation)
+- [109. Example Player Stories](05-scenarios-and-validation.md#109-example-player-stories)
+- [110. Example Emergent Events](05-scenarios-and-validation.md#110-example-emergent-events)
+- [111. Example World Timeline](05-scenarios-and-validation.md#111-example-world-timeline)
+- [112. Example Settlement Lifecycle](05-scenarios-and-validation.md#112-example-settlement-lifecycle)
+- [113. Example Ecosystem Collapse](05-scenarios-and-validation.md#113-example-ecosystem-collapse)
+- [114. Example Civilization Collapse](05-scenarios-and-validation.md#114-example-civilization-collapse)
+- [115. Example 100-Hour Player Journey](05-scenarios-and-validation.md#115-example-100-hour-player-journey)
+- [116. Example 1000-Hour World Evolution](05-scenarios-and-validation.md#116-example-1000-hour-world-evolution)
+- [117. Final Recommended Scope](05-scenarios-and-validation.md#117-final-recommended-scope)
+
+## Phụ lục
+
+- [A Bản đồ tương tác hệ thống](05-scenarios-and-validation.md#appendix-a-system-interaction-map)
+- [B Sổ quyết định](05-scenarios-and-validation.md#appendix-b-decision-register)
+- [C Kế hoạch nghiệm thu prototype](05-scenarios-and-validation.md#appendix-c-prototype-acceptance-plan)
+- [D Đơn vị và thuật ngữ](05-scenarios-and-validation.md#appendix-d-units-and-shared-terms)
+- [E Cách sử dụng tài liệu](05-scenarios-and-validation.md#appendix-e-how-to-use-this-bible)

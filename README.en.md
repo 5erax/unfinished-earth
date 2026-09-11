@@ -14,7 +14,9 @@ The working target is solo play and 1–8-player co-op PvE in private worlds. Co
 
 **Preproduction design. No playable build, gameplay implementation or performance benchmarks are available.**
 
-This repository is established before the Game Design Bible. The next deliverable will turn the concept into explicit rules, a bounded MVP and validation criteria. Capacity, schedules and performance figures will be treated as unvalidated targets.
+Game Design Bible v0.1 now covers 117 sections, 20 emergent scenarios, explicit system contracts, a bounded MVP, technical risks and validation criteria. Capacity, schedules and performance figures remain unvalidated design targets.
+
+The repository and its initial READMEs were published before detailed design authoring began. Vietnamese is the primary language of the full Bible.
 
 ## Design direction
 
