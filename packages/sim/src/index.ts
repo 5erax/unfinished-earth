@@ -237,3 +237,5 @@ export function catchUpOfflineTo(
   const tickCount = Math.floor(elapsedRealSeconds / GAME_HOUR_REAL_SECONDS);
   return advanceSimulationTicks(state, tickCount);
 }
+
+export * from "./water-food.js";
