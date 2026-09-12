@@ -6,3 +6,10 @@ packages:
 # esbuild is required by Vite/Vitest tooling and is intentionally approved.
 allowBuilds:
   esbuild: true
+
+# pnpm 12 also rejects lockfile entries published inside its release-age window.
+# This exact transitive type package was produced by the reviewed Three.js toolchain
+# and already passed install/typecheck/test/build in CI, so the exception is pinned
+# to one version rather than disabling the policy globally.
+minimumReleaseAgeExclude:
+  - "@types/three@0.186.0"
