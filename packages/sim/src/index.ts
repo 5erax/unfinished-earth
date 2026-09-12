@@ -226,5 +226,6 @@ export function catchUpOfflineTo(
 export * from "./prng.js";
 export * from "./water-food.js";
 export * from "./settlement-food.js";
+export * from "./settlement-production.js";
 export * from "./weather.js";
 export * from "./world-simulation.js";
