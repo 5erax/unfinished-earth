@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { describe, expect, it } from "vitest";
 import { PostgresWorldStore } from "./postgres-world-store.js";
 import {
+  SIMULATION_BOUNDARY_EVENT,
   SIMULATION_BOUNDARY_INTENT,
   replaySimulationState,
 } from "./simulation-replay.js";
@@ -49,7 +50,7 @@ function advancePrototypeBoundary(
 }
 
 describeDatabase("durable simulation boundary replay", () => {
-  it("reconstructs exact post-boundary state from snapshot + journal tail", async () => {
+  it("reconstructs exact post-boundary state from snapshot + projected domain-event tail", async () => {
     const worldId = `sim-replay-${randomUUID()}`;
     const firstStore = PostgresWorldStore.fromConnectionString(databaseUrl);
     const firstActor = await WorldActor.create(worldId, firstStore);
@@ -80,6 +81,13 @@ describeDatabase("durable simulation boundary replay", () => {
         boundaryId: "hour:1",
         serverTick: boundary1.serverTick,
       }),
+      ({ result }) => [
+        {
+          eventType: SIMULATION_BOUNDARY_EVENT,
+          payload: result,
+          causeIds: ["world:initial-water"],
+        },
+      ],
     );
     expect(committed1.revision).toBe(1);
     await firstActor.saveSnapshot(boundary1);
@@ -101,6 +109,13 @@ describeDatabase("durable simulation boundary replay", () => {
         boundaryId: "hour:2",
         serverTick: boundary2.serverTick,
       }),
+      ({ result }) => [
+        {
+          eventType: SIMULATION_BOUNDARY_EVENT,
+          payload: result,
+          causeIds: ["gate:upstream"],
+        },
+      ],
     );
     expect(committed2.revision).toBe(2);
 
@@ -115,6 +130,9 @@ describeDatabase("durable simulation boundary replay", () => {
         boundaryId: "should-not-run",
         serverTick: 999,
       }),
+      () => {
+        throw new Error("duplicate retry must not re-project events");
+      },
     );
     expect(duplicate).toMatchObject({ revision: 2, duplicate: true });
     await firstStore.close();
@@ -130,6 +148,10 @@ describeDatabase("durable simulation boundary replay", () => {
 
       expect(bundle.snapshot).toMatchObject({ revision: 1, state: boundary1 });
       expect(bundle.journal).toHaveLength(1);
+      expect(bundle.journal[0]).toMatchObject({
+        eventType: SIMULATION_BOUNDARY_EVENT,
+        causeIds: ["gate:upstream"],
+      });
       expect(replayed).toEqual({
         state: boundary2,
         revision: 2,
@@ -145,7 +167,7 @@ describeDatabase("durable simulation boundary replay", () => {
             FROM event_outbox
             WHERE world_id = $1 AND event_type = $2
           `,
-          [worldId, SIMULATION_BOUNDARY_INTENT],
+          [worldId, SIMULATION_BOUNDARY_EVENT],
         );
         expect(Number(events.rows[0]?.count ?? 0)).toBe(2);
       } finally {
@@ -155,10 +177,67 @@ describeDatabase("durable simulation boundary replay", () => {
       await restartedStore.close();
     }
   });
+
+  it("rolls back revision, receipt and events when domain-event projection fails", async () => {
+    const worldId = `projection-failure-${randomUUID()}`;
+    const commandId = randomUUID();
+    const store = PostgresWorldStore.fromConnectionString(databaseUrl);
+
+    try {
+      const actor = await WorldActor.create(worldId, store);
+      await expect(
+        actor.execute(
+          {
+            commandId,
+            intent: SIMULATION_BOUNDARY_INTENT,
+            payload: { boundaryId: "hour:1" },
+          },
+          async () => ({
+            state: {
+              serverTick: 1,
+              prngState: 7,
+              water: { upstreamChannelM3: 1, downstreamChannelM3: 1 },
+              crop: { downstreamProgress: 1 },
+              food: { downstreamRations: 1 },
+            } satisfies PrototypeDomainState,
+            boundaryId: "hour:1",
+            serverTick: 1,
+          }),
+          () => {
+            throw new Error("simulated domain-event projection failure");
+          },
+        ),
+      ).rejects.toThrow("simulated domain-event projection failure");
+
+      expect(actor.revision).toBe(0);
+
+      const pool = new Pool({ connectionString: databaseUrl });
+      try {
+        const [world, receipts, events] = await Promise.all([
+          pool.query("SELECT revision FROM worlds WHERE id = $1", [worldId]),
+          pool.query(
+            "SELECT count(*)::int AS count FROM command_receipts WHERE scope = $1 AND command_id = $2",
+            [`world:${worldId}`, commandId],
+          ),
+          pool.query(
+            "SELECT count(*)::int AS count FROM event_outbox WHERE world_id = $1",
+            [worldId],
+          ),
+        ]);
+        expect(Number(world.rows[0]?.revision ?? -1)).toBe(0);
+        expect(Number(receipts.rows[0]?.count ?? -1)).toBe(0);
+        expect(Number(events.rows[0]?.count ?? -1)).toBe(0);
+      } finally {
+        await pool.end();
+      }
+    } finally {
+      await store.close();
+    }
+  });
 });
 
 describe("simulation replay validation", () => {
-  it("rejects malformed simulation boundary envelopes instead of guessing", () => {
+  it("rejects malformed simulation boundary domain events instead of guessing", () => {
     expect(() =>
       replaySimulationState<PrototypeDomainState>({
         worldRevision: 2,
@@ -177,8 +256,8 @@ describe("simulation replay validation", () => {
           {
             sequence: 1,
             revision: 2,
-            eventType: SIMULATION_BOUNDARY_INTENT,
-            payload: { intent: SIMULATION_BOUNDARY_INTENT, result: {} },
+            eventType: SIMULATION_BOUNDARY_EVENT,
+            payload: {},
             causeIds: [],
           },
         ],
