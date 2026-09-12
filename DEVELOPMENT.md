@@ -19,7 +19,7 @@ cp .env.example .env
 pnpm db:migrate
 ```
 
-The lockfile is committed and CI uses `pnpm install --frozen-lockfile`. pnpm build scripts remain allow-listed narrowly; the current release-age exception is pinned to one reviewed `@types/three` version instead of disabling the supply-chain policy globally.
+The committed `pnpm-lock.yaml` is the dependency source of truth for the spike. pnpm supply-chain policy checks remain enabled; do not regenerate the lockfile casually or disable those checks globally.
 
 ## Run the spikes
 
@@ -30,25 +30,31 @@ pnpm dev:client
 
 The client defaults to Vite's local URL. The world server listens on `127.0.0.1:8787` unless overridden.
 
-The current WebSocket persistence spike accepts a `spike-write` message with a client-generated `commandId`. Retrying the same command ID with the same request returns the committed receipt; reusing it with a different request is rejected.
+The first world-server process that starts acquires an ownership epoch (`fencingToken`). Starting another actor for the same world advances that epoch; the older actor becomes a stale writer and PostgreSQL rejects its mutations and snapshots.
 
 ## Verification
 
-With PostgreSQL running and `DATABASE_URL` set:
-
 ```bash
-pnpm db:migrate
 pnpm typecheck
 pnpm test
 pnpm build
 ```
 
-CI starts PostgreSQL 18, applies the bootstrap migration, then runs the same typecheck/test/build gates. The world-server integration suite currently verifies:
+CI additionally starts PostgreSQL 18 and runs the prototype migrations before typecheck/tests/build. The world-server integration suite currently verifies command dedupe, ACK-loss retry after restart, rollback, fencing of competing actors, and snapshot + journal-tail recovery.
 
-- retrying one command does not create a second revision, receipt, or outbox event;
-- an acknowledged command survives a store/actor restart;
-- reusing a command ID with a different request is rejected;
-- handler failure rolls back revision, receipt, and outbox writes together.
+## Persistence spike boundaries
+
+The current recovery path stores explicit `world_snapshots` and reuses the transactional `event_outbox` as the first ordered journal. This proves a recovery primitive, not a complete production lease or simulation save format.
+
+Still intentionally pending:
+
+- timed lease/heartbeat and graceful ownership handoff;
+- deterministic persistence of simulation tick, PRNG state and catch-up watermark;
+- reconnect snapshot/delta transfer;
+- forced-process-kill recovery testing;
+- snapshot compaction/retention policy.
+
+See `docs/architecture/0002-command-durability.md` and `docs/architecture/0003-world-recovery-and-fencing.md` before changing these invariants.
 
 ## Scope rule
 
