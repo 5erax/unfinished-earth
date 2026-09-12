@@ -34,6 +34,7 @@ describe("finite two-basin water ledger", () => {
 
     expect(Math.abs(result.ledger.residualM3)).toBeLessThanOrEqual(1e-6);
     expect(result.ledger.rainM3).toBeCloseTo(786.432, 9);
+    expect(result.ledger.evaporationM3).toBe(0);
     expect(result.ledger.internalTransferM3).toBeGreaterThan(0);
     expect(result.ledger.exportM3).toBeGreaterThan(0);
     expect(result.state.upstream.soilM3).toBeGreaterThanOrEqual(0);
@@ -82,6 +83,47 @@ describe("finite two-basin water ledger", () => {
     );
     expect(Math.abs(lowGate.ledger.residualM3)).toBeLessThanOrEqual(1e-6);
     expect(Math.abs(openGate.ledger.residualM3)).toBeLessThanOrEqual(1e-6);
+  });
+
+  it("subtracts evaporation from explicit soil/channel/flood footprints without overdrawing a store", () => {
+    const nearlyDry = basin({
+      soilM3: 0.5,
+      groundwaterM3: 0,
+      channelM3: 0.2,
+      floodM3: 0.25,
+      treeCover: 0,
+      gateFraction: 0.2,
+    });
+    const evaporation = {
+      potentialEvaporationMm: 1,
+      soilAreaM2: 1_000,
+      channelAreaM2: 1_000,
+      floodAreaM2: 1_000,
+    };
+
+    const result = stepTwoBasinWaterHour(
+      { upstream: nearlyDry, downstream: nearlyDry },
+      {
+        upstreamRainMm: 0,
+        downstreamRainMm: 0,
+        upstreamEvaporation: evaporation,
+        downstreamEvaporation: evaporation,
+      },
+    );
+
+    expect(result.ledger.evaporationM3).toBeCloseTo(1.9, 12);
+    expect(result.ledger.exportM3).toBe(0);
+    expect(result.state.upstream).toMatchObject({
+      soilM3: 0,
+      channelM3: 0,
+      floodM3: 0,
+    });
+    expect(result.state.downstream).toMatchObject({
+      soilM3: 0,
+      channelM3: 0,
+      floodM3: 0,
+    });
+    expect(Math.abs(result.ledger.residualM3)).toBeLessThanOrEqual(1e-6);
   });
 });
 
