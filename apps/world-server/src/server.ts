@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   CommandIdConflictError,
   PostgresWorldStore,
+  StaleWorldOwnerError,
 } from "./world/postgres-world-store.js";
 import { WorldActor } from "./world/world-actor.js";
 
@@ -48,6 +49,7 @@ export async function createServer(options: ServerOptions = {}) {
   app.get("/health", async () => ({
     ok: true,
     worldRevision: actor.revision,
+    fencingToken: actor.fencingToken,
   }));
 
   app.get("/ws", { websocket: true }, (socket) => {
@@ -73,7 +75,13 @@ export async function createServer(options: ServerOptions = {}) {
       }
 
       if (parsed.data.type === "get-revision") {
-        socket.send(JSON.stringify({ type: "revision", revision: actor.revision }));
+        socket.send(
+          JSON.stringify({
+            type: "revision",
+            revision: actor.revision,
+            fencingToken: actor.fencingToken,
+          }),
+        );
         return;
       }
 
@@ -89,7 +97,10 @@ export async function createServer(options: ServerOptions = {}) {
 
         socket.send(JSON.stringify({ type: "spike-write-result", ...response }));
       } catch (error) {
-        if (error instanceof CommandIdConflictError) {
+        if (
+          error instanceof CommandIdConflictError ||
+          error instanceof StaleWorldOwnerError
+        ) {
           socket.send(
             JSON.stringify({
               type: "error",
