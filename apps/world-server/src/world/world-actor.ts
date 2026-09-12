@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { PostgresWorldStore } from "./postgres-world-store.js";
 
 export type WorldCommand<TPayload = unknown> = {
@@ -19,18 +20,39 @@ export class WorldActor {
   private constructor(
     private readonly worldId: string,
     private readonly store: PostgresWorldStore,
+    readonly ownerId: string,
+    readonly fencingToken: number,
     revision: number,
   ) {
     this.#revision = revision;
   }
 
-  static async create(worldId: string, store: PostgresWorldStore) {
-    const revision = await store.loadRevision(worldId);
-    return new WorldActor(worldId, store, revision);
+  static async create(
+    worldId: string,
+    store: PostgresWorldStore,
+    ownerId = randomUUID(),
+  ) {
+    const ownership = await store.acquireOwnership(worldId, ownerId);
+    return new WorldActor(
+      worldId,
+      store,
+      ownership.ownerId,
+      ownership.fencingToken,
+      ownership.revision,
+    );
   }
 
   get revision() {
     return this.#revision;
+  }
+
+  async saveSnapshot<TState>(state: TState) {
+    await this.store.saveSnapshot(
+      this.worldId,
+      this.fencingToken,
+      this.#revision,
+      state,
+    );
   }
 
   async execute<TPayload, TResult>(
@@ -52,6 +74,7 @@ export class WorldActor {
       const response = await this.store.executeCommand(
         {
           worldId: this.worldId,
+          fencingToken: this.fencingToken,
           commandId: command.commandId,
           intent: command.intent,
           payload: command.payload,
