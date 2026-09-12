@@ -29,7 +29,7 @@ Mở `http://127.0.0.1:3000`. Dùng danh sách địa điểm để đi đến n
 
 Đồng hồ prototype mặc định **×30** (một ngày game = một phút thực). Đặt `SIM_SPEED=1` để dùng nhịp 30 phút/ngày của thiết kế. Dữ liệu nằm trong `data/world.sqlite`; giữ thư mục này qua lần chạy lại.
 
-Có [Docker Compose](compose.yaml) cho một máy chủ với ổ dữ liệu bền vững. Đây chưa phải dịch vụ đã được đưa lên hosting.
+Có [Docker Compose](compose.yaml) cho một máy chủ với ổ dữ liệu bền vững. Có thêm adapter Cloudflare Workers/D1 cho bản staging trên Sites; xem phần staging trong hướng dẫn.
 
 Game Design Bible v0.1 gồm 117 mục, 20 tình huống phát sinh, bản đồ tương tác hệ thống, phạm vi MVP và kế hoạch kiểm chứng. Các con số về quy mô, hiệu năng và tiến độ là mục tiêu hoặc giả định cần thử nghiệm, chưa phải kết quả đo.
 

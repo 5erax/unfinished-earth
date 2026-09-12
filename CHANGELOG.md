@@ -1,5 +1,9 @@
 # Lịch sử thay đổi
 
+## 2026-09-12 — Staging và kiểm thử giao diện
+
+Bổ sung Worker/D1, transaction CAS chống mất cập nhật giữa instance, migration và build cho Sites. Bản đồ 2D tự thay thế khi không có WebGL. Sửa mã lệnh trong preview HTTP và giữ nút thao tác ổn định qua heartbeat. 14 kiểm thử mô phỏng/API đạt; kiểm tra trực quan desktop và chuỗi xây cầu/giao thức ăn đã chạy trên preview.
+
 ## 2026-09-12 — Prototype gameplay 0.1
 
 Thêm client 3D trực giao và máy chủ Node.js/SQLite. Nối thu thập → sửa cầu → vận chuyển thức ăn, cùng cống tưới → ruộng/cá → nghề và di cư NPC → Chronicle. Bổ sung kiểm thử lệnh lặp, tranh vật phẩm, save/restart và chuỗi chơi qua HTTP; cấu hình CI, Docker và hướng dẫn vận hành.

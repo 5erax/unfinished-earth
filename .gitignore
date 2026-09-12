@@ -12,3 +12,6 @@ work/
 data/
 *.log
 coverage/
+dist/
+.sites-runtime/
+.wrangler/

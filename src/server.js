@@ -79,6 +79,7 @@ export function createGameServer({
     }
   }
   const files = new Map([
+    ["/map2d.js", ["public/map2d.js", "text/javascript"]],
     ["/", ["public/index.html", "text/html"]],
     ["/app.js", ["public/app.js", "text/javascript"]],
     ["/style.css", ["public/style.css", "text/css"]],

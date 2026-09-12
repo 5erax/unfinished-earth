@@ -200,6 +200,7 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     requireThat(!w.bridge, "Cầu đã được sửa.");
     spend(p, 8, 4);
     w.bridge = true;
+    w.cart.status = w.cart.cargo ? "transit" : w.depot ? "ready" : "empty";
     w.bridgeCause = event(
       w,
       "build",
@@ -207,7 +208,7 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       "bridge",
       [1],
     );
-    message = "Cầu đã thông. Xe bắt đầu giao hàng khi có tín dụng vận hành.";
+    message = "Cầu đã thông. Xe có thể giao lương thực từ kho.";
   } else if (cmd.type === "gate") {
     near(p, POINTS.gate);
     requireThat(typeof cmd.open === "boolean", "Trạng thái cống không hợp lệ.");

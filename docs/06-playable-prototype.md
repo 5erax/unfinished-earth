@@ -6,7 +6,7 @@ Kiểm chứng chuỗi nhỏ có thể thao tác: lấy vật liệu → sửa c
 
 | Hệ thống | Đã triển khai | Chưa nghiệm thu / còn thiếu |
 | --- | --- | --- |
-| Client | Three.js trực giao, xoay 90°, nhân vật, click chọn vật thể, WASD, tìm đường và bảng tương tác tiếng Việt | Visual QA bị chặn trong môi trường triển khai; chưa đo FPS, chưa có art/audio hoàn chỉnh |
+| Client | Three.js trực giao, xoay 90°, nhân vật, click chọn vật thể, WASD, tìm đường và bảng tương tác tiếng Việt | Đã kiểm tra desktop bằng bản đồ 2D tương thích; trình duyệt kiểm tra thiếu WebGL nên chưa xác minh hình ảnh 3D/FPS |
 | Vùng | Lưới 32 × 32 đại diện 512 × 512 m, hai làng, một ruin | Bước di chuyển theo ô là abstraction của greybox; chưa đạt vận tốc, va chạm và navmesh của thiết kế |
 | Xây dựng | Cầu cố định 8 gỗ/4 đá, cống cố định 4 gỗ/2 đá | Chưa có placement tự do, 8 building definitions, nhà một tầng tùy chỉnh, condition/repair |
 | Hậu cần | Túi 40 đơn vị, kho chung, xe chở 8 khẩu phần trong hai ngày | Xe dùng tiến độ theo ngày, chưa pathfind vật lý; chưa có cầu hỏng giữa chuyến và cargo recovery |
@@ -30,7 +30,7 @@ npm test
 npm start
 ```
 
-Mở `http://127.0.0.1:3000`. Máy chủ mặc định chỉ bind loopback. `npm run dev` bật tự khởi động lại khi sửa mã máy chủ.
+Mở `http://127.0.0.1:3000`. Máy chủ mặc định chỉ bind loopback. `npm run dev` chạy cùng Worker API với SQLite cục bộ trong `.sites-runtime/preview.sqlite`. `npm run dev:node` chạy máy chủ Node riêng ở chế độ watch. Hai bản dùng save riêng.
 
 | Biến | Mặc định | Ý nghĩa |
 | --- | --- | --- |
@@ -92,7 +92,7 @@ Sao lưu an toàn: dừng container để đóng DB, sao chép **toàn bộ volu
 - HTTP: cookie, command retry trước/sau restart, không lộ túi người khác, chặn cross-origin POST.
 - Luồng hoàn chỉnh qua HTTP từ túi rỗng: thu thập → sửa → qua cầu → giao → mở cống → thu hoạch.
 
-**Chưa kiểm chứng:** hình ảnh, thao tác trình duyệt, FPS/mobile, crash ngay sau ACK, Docker runtime, hosting, stress test tám người và tất cả T01–T15. Trình duyệt của môi trường phát triển chặn địa chỉ localhost; không dùng kết quả API để tuyên bố browser QA đã đạt.
+**Đã bổ sung QA staging:** bản đồ 2D tương thích trên desktop, thu thập gỗ/đá, tự đi đến địa điểm, sửa cầu, qua sông, giao thức ăn và mở cống đã thao tác qua trình duyệt preview. Tải lại trang và khởi động lại preview vẫn giữ nhân vật/vật liệu. Trình duyệt kiểm tra không có WebGL; chế độ 3D, FPS/mobile, crash ngay sau ACK, Docker runtime và stress tám người vẫn chưa nghiệm thu.
 
 ## Khoảng cách tới MVP
 
@@ -107,3 +107,13 @@ Sao lưu an toàn: dừng container để đóng DB, sao chép **toàn bộ volu
 | P2 | Art/UI/audio và playtest nhân quả | Tối thiểu 8/10 người thử giải thích đúng nguyên nhân và cách phản ứng |
 
 Nhân lực, ngân sách và host vận hành chưa được xác định trong repo. Cần chốt các yếu tố đó trước khi gán lịch nghiệm thu MVP; không diễn giải phạm vi prototype này thành cam kết thời gian mới.
+
+## Staging trên Sites / Cloudflare Workers
+
+Thêm `src/cloud-worker.js` và `src/cloud-store.js` để chạy trên Worker với binding D1 `DB`, dùng chung `src/world.js` với bản Node. `npm run build` đóng gói entrypoint và static assets, kèm migration trong `drizzle/`. Bản staging bắt đầu với save mới, không nhập save local. Dữ liệu thử nghiệm preview không được đóng gói.
+
+D1 batch commit snapshot + receipt trong một transaction. Revision compare-and-swap và receipt guard ngăn mất cập nhật/lặp lệnh giữa các Worker instance. Mỗi request đọc qua D1 session `first-primary`. Phiên dùng cookie HttpOnly/SameSite và có Secure trên HTTPS. Site giữ quyền truy cập riêng của chủ sở hữu; không công khai hoặc mời người ngoài trong bước này.
+
+Worker không giữ bộ đếm thời gian trong RAM: mỗi request cập nhật bù từ save; sau heartbeat cuối 15 giây chuyển sang trạng thái vắng. Deadline 72 giờ được giữ qua cold start. Giới hạn 100 nhân vật cho staging; chưa có UI thu hồi phiên hoặc compaction dài hạn. Bản kiểm thử có 14 tests, bao gồm hai session độc lập, tranh tài nguyên, receipt race, CAS retry và reopen DB bằng runtime adapter. Đây chưa phải đo tải D1 thực hoặc playtest hai người thật qua hai trình duyệt.
+
+Giao diện tự dùng bản đồ Canvas 2D khi WebGL không có. Các nút hành động giữ DOM ổn định qua heartbeat; mã lệnh dùng Web Crypto getRandomValues để hoạt động cả trong preview HTTP.

@@ -1,3 +1,4 @@
+import { Map2D } from "/map2d.js";
 import * as THREE from "/three.js";
 const $ = (id) => document.getElementById(id);
 const P = {
@@ -85,7 +86,12 @@ function accept(next) {
 async function command(cmd) {
   if (busy || !state) return false;
   busy = true;
-  const body = JSON.stringify({ ...cmd, id: crypto.randomUUID() });
+  const body = JSON.stringify({
+    ...cmd,
+    id: Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+      b.toString(16).padStart(2, "0"),
+    ).join(""),
+  });
   try {
     let result;
     try {
@@ -273,13 +279,24 @@ window.addEventListener("keydown", (e) => {
 });
 for (const b of document.querySelectorAll("[data-move]"))
   b.onclick = () => move(...b.dataset.move.split(",").map(Number));
+let actionSpecs = [];
 function action(label, cmd, disabled = false) {
-  const b = document.createElement("button");
-  b.textContent = label;
-  b.disabled = disabled;
-  b.onclick = () => command(cmd);
-  $("actions").append(b);
+  actionSpecs.push({ label, cmd, disabled });
 }
+function commitActions() {
+  const signature = JSON.stringify(actionSpecs);
+  if ($("actions").dataset.signature === signature) return;
+  $("actions").dataset.signature = signature;
+  $("actions").replaceChildren();
+  for (const { label, cmd, disabled } of actionSpecs) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.disabled = disabled;
+    b.onclick = () => command(cmd);
+    $("actions").append(b);
+  }
+}
+
 function renderUI() {
   if (!state) return;
   const p = state.players[state.you];
@@ -322,7 +339,7 @@ function renderUI() {
   ];
   $("selection-title").textContent = title;
   $("selection-description").textContent = description;
-  $("actions").replaceChildren();
+  actionSpecs = [];
   if (r)
     action(
       `Thu thập ${r.type === "wood" ? "gỗ" : "đá"} · còn ${r.remaining}`,
@@ -379,6 +396,7 @@ function renderUI() {
       { type: "explore" },
       p.discoveries.includes("ruin"),
     );
+  commitActions();
   $("moisture").value = state.moisture;
   $("fish").value = state.fish;
   $("moisture-value").textContent = `${Math.round(state.moisture * 100)}%`;
@@ -421,7 +439,7 @@ const container = $("world"),
 scene.background = new THREE.Color("#41635e");
 scene.fog = new THREE.Fog("#41635e", 65, 135);
 const camera = new THREE.OrthographicCamera(-24, 24, 24, -24, 0.1, 200);
-let renderer;
+let renderer, fallback;
 try {
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -430,8 +448,7 @@ try {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.append(renderer.domElement);
 } catch {
-  container.textContent =
-    "Thiết bị chưa hỗ trợ WebGL. Bạn vẫn có thể chọn địa điểm và chơi bằng bảng điều khiển.";
+  fallback = new Map2D(container, select, travel);
 }
 scene.add(new THREE.HemisphereLight(0xdff4df, 0x354c44, 2.5));
 const sun = new THREE.DirectionalLight(0xffe1a9, 3.4);
@@ -624,6 +641,7 @@ for (const x of [-0.5, 0.5]) {
 scene.add(cart);
 function renderWorld() {
   if (!state) return;
+  fallback?.draw(state, selected, angle);
   deck.visible = state.bridge;
   waterChannel.visible = state.gate;
   crops.scale.y = 0.15 + state.crop;
@@ -700,8 +718,10 @@ function positionCamera() {
     16 + Math.cos(angle + Math.PI / 4) * r,
   );
   camera.lookAt(16, 0, 16);
+  fallback?.draw(state, selected, angle);
 }
 function resize() {
+  if (fallback) fallback.draw(state, selected, angle);
   if (!renderer) return;
   const w = container.clientWidth,
     h = container.clientHeight;
