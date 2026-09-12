@@ -4,17 +4,12 @@ import type {
 } from "./postgres-world-store.js";
 
 export const SIMULATION_BOUNDARY_INTENT = "simulation.boundary.commit" as const;
+export const SIMULATION_BOUNDARY_EVENT = "simulation.boundary.committed" as const;
 
-export type SimulationBoundaryEnvelope<TState> = {
-  commandId: string;
-  fencingToken: number;
-  intent: typeof SIMULATION_BOUNDARY_INTENT;
-  payload: unknown;
-  result: {
-    state: TState;
-    boundaryId: string;
-    serverTick: number;
-  };
+export type SimulationBoundaryEvent<TState> = {
+  state: TState;
+  boundaryId: string;
+  serverTick: number;
 };
 
 export type ReplayedSimulationState<TState> = {
@@ -28,43 +23,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function readBoundaryEnvelope<TState>(
+function readBoundaryEvent<TState>(
   entry: RecoveryJournalEntry,
-): SimulationBoundaryEnvelope<TState> | null {
-  if (entry.eventType !== SIMULATION_BOUNDARY_INTENT) {
+): SimulationBoundaryEvent<TState> | null {
+  if (entry.eventType !== SIMULATION_BOUNDARY_EVENT) {
     return null;
   }
 
   if (!isRecord(entry.payload)) {
     throw new Error(
-      `Simulation boundary at revision ${entry.revision} has a non-object journal payload.`,
+      `Simulation boundary at revision ${entry.revision} has a non-object event payload.`,
     );
   }
 
-  const intent = entry.payload.intent;
-  const result = entry.payload.result;
-  if (intent !== SIMULATION_BOUNDARY_INTENT || !isRecord(result)) {
-    throw new Error(
-      `Simulation boundary at revision ${entry.revision} has an invalid command envelope.`,
-    );
-  }
-
-  const boundaryId = result.boundaryId;
-  const serverTick = result.serverTick;
+  const boundaryId = entry.payload.boundaryId;
+  const serverTick = entry.payload.serverTick;
   if (
     typeof boundaryId !== "string" ||
     boundaryId.length === 0 ||
     typeof serverTick !== "number" ||
     !Number.isSafeInteger(serverTick) ||
     serverTick < 0 ||
-    !("state" in result)
+    !("state" in entry.payload)
   ) {
     throw new Error(
       `Simulation boundary at revision ${entry.revision} has invalid replay metadata.`,
     );
   }
 
-  return entry.payload as SimulationBoundaryEnvelope<TState>;
+  return entry.payload as SimulationBoundaryEvent<TState>;
 }
 
 export function replaySimulationState<TState>(
@@ -83,27 +70,26 @@ export function replaySimulationState<TState>(
   const seenBoundaryIds = new Set<string>();
 
   for (const entry of bundle.journal) {
-    if (entry.revision <= revision) {
-      throw new Error(
-        `Journal revision ${entry.revision} is not after replay revision ${revision}.`,
-      );
-    }
-
-    const envelope = readBoundaryEnvelope<TState>(entry);
-    if (!envelope) {
+    const event = readBoundaryEvent<TState>(entry);
+    if (!event) {
       continue;
     }
 
-    const { boundaryId } = envelope.result;
-    if (seenBoundaryIds.has(boundaryId)) {
-      throw new Error(`Simulation boundary ${boundaryId} appears more than once.`);
+    if (entry.revision <= revision) {
+      throw new Error(
+        `Simulation journal revision ${entry.revision} is not after replay revision ${revision}.`,
+      );
     }
 
-    seenBoundaryIds.add(boundaryId);
-    state = envelope.result.state;
-    serverTick = envelope.result.serverTick;
+    if (seenBoundaryIds.has(event.boundaryId)) {
+      throw new Error(`Simulation boundary ${event.boundaryId} appears more than once.`);
+    }
+
+    seenBoundaryIds.add(event.boundaryId);
+    state = event.state;
+    serverTick = event.serverTick;
     revision = entry.revision;
-    appliedBoundaryIds.push(boundaryId);
+    appliedBoundaryIds.push(event.boundaryId);
   }
 
   return {
