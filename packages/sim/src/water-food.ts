@@ -27,14 +27,24 @@ export type TwoBasinWaterState = {
   downstream: BasinWaterState;
 };
 
+export type BasinEvaporationInput = {
+  potentialEvaporationMm: number;
+  soilAreaM2: number;
+  channelAreaM2: number;
+  floodAreaM2: number;
+};
+
 export type HourlyWaterInput = {
   upstreamRainMm: number;
   downstreamRainMm: number;
+  upstreamEvaporation?: BasinEvaporationInput;
+  downstreamEvaporation?: BasinEvaporationInput;
 };
 
 export type WaterLedger = {
   startM3: number;
   rainM3: number;
+  evaporationM3: number;
   internalTransferM3: number;
   exportM3: number;
   endM3: number;
@@ -97,7 +107,56 @@ function validateBasin(state: BasinWaterState) {
   }
 }
 
-function applyLocalHourlyHydrology(state: BasinWaterState, rainMm: number) {
+function applyBasinEvaporation(
+  state: BasinWaterState,
+  input: BasinEvaporationInput | undefined,
+) {
+  if (!input) {
+    return { state, evaporationM3: 0 };
+  }
+
+  requireFiniteNonNegative(
+    input.potentialEvaporationMm,
+    "potentialEvaporationMm",
+  );
+  requireFiniteNonNegative(input.soilAreaM2, "soilAreaM2");
+  requireFiniteNonNegative(input.channelAreaM2, "channelAreaM2");
+  requireFiniteNonNegative(input.floodAreaM2, "floodAreaM2");
+
+  const footprintM2 =
+    input.soilAreaM2 + input.channelAreaM2 + input.floodAreaM2;
+  if (footprintM2 > BASIN_AREA_M2 + 1e-9) {
+    throw new RangeError("evaporation footprint exceeds basin area");
+  }
+
+  const soilDemandM3 =
+    (input.potentialEvaporationMm * input.soilAreaM2) / 1_000;
+  const channelDemandM3 =
+    (input.potentialEvaporationMm * input.channelAreaM2) / 1_000;
+  const floodDemandM3 =
+    (input.potentialEvaporationMm * input.floodAreaM2) / 1_000;
+
+  const soilEvaporationM3 = Math.min(state.soilM3, soilDemandM3);
+  const channelEvaporationM3 = Math.min(state.channelM3, channelDemandM3);
+  const floodEvaporationM3 = Math.min(state.floodM3, floodDemandM3);
+
+  return {
+    state: {
+      ...state,
+      soilM3: state.soilM3 - soilEvaporationM3,
+      channelM3: state.channelM3 - channelEvaporationM3,
+      floodM3: state.floodM3 - floodEvaporationM3,
+    },
+    evaporationM3:
+      soilEvaporationM3 + channelEvaporationM3 + floodEvaporationM3,
+  };
+}
+
+function applyLocalHourlyHydrology(
+  state: BasinWaterState,
+  rainMm: number,
+  evaporation: BasinEvaporationInput | undefined,
+) {
   validateBasin(state);
   requireFiniteNonNegative(rainMm, "rainMm");
 
@@ -136,15 +195,21 @@ function applyLocalHourlyHydrology(state: BasinWaterState, rainMm: number) {
     channelM3 = CHANNEL_BANKFULL_M3;
   }
 
-  return {
-    state: {
+  const evaporated = applyBasinEvaporation(
+    {
       ...state,
       soilM3,
       groundwaterM3,
       channelM3,
       floodM3,
     },
+    evaporation,
+  );
+
+  return {
+    state: evaporated.state,
     rainM3,
+    evaporationM3: evaporated.evaporationM3,
   };
 }
 
@@ -171,10 +236,12 @@ export function stepTwoBasinWaterHour(
   const upstreamLocal = applyLocalHourlyHydrology(
     state.upstream,
     input.upstreamRainMm,
+    input.upstreamEvaporation,
   );
   const downstreamLocal = applyLocalHourlyHydrology(
     state.downstream,
     input.downstreamRainMm,
+    input.downstreamEvaporation,
   );
 
   const upstreamTransferM3 = Math.min(
@@ -202,7 +269,9 @@ export function stepTwoBasinWaterHour(
   const nextState = { upstream, downstream };
   const endM3 = waterTotal(nextState);
   const rainM3 = upstreamLocal.rainM3 + downstreamLocal.rainM3;
-  const expectedEndM3 = startM3 + rainM3 - exportM3;
+  const evaporationM3 =
+    upstreamLocal.evaporationM3 + downstreamLocal.evaporationM3;
+  const expectedEndM3 = startM3 + rainM3 - evaporationM3 - exportM3;
   const residualM3 = endM3 - expectedEndM3;
 
   if (Math.abs(residualM3) > 1e-6) {
@@ -219,6 +288,7 @@ export function stepTwoBasinWaterHour(
     ledger: {
       startM3,
       rainM3,
+      evaporationM3,
       internalTransferM3: upstreamTransferM3,
       exportM3,
       endM3,
