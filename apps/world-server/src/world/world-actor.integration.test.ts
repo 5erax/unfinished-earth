@@ -314,4 +314,50 @@ describeDatabase("PostgreSQL world command durability", () => {
       await restartedStore.close();
     }
   });
+
+  it("T06: preserves deterministic simulation metadata inside a durable snapshot", async () => {
+    const worldId = `test-${randomUUID()}`;
+    const store = PostgresWorldStore.fromConnectionString(databaseUrl);
+
+    const simulationSnapshot = {
+      simVersion: "prototype-0.1",
+      serverTick: 144,
+      prngState: 0x12345678,
+      accumulator: 37,
+      absenceStartedAtRealSeconds: 900,
+      lastSimulatedAtRealSeconds: 1800,
+      catchUpWatermarkRealSeconds: 1800,
+      scheduledInputs: [
+        { id: "future-input", tick: 150, delta: 5 },
+      ],
+    };
+
+    try {
+      const actor = await WorldActor.create(worldId, store);
+      await actor.execute(
+        {
+          commandId: randomUUID(),
+          intent: "simulation.checkpoint",
+          payload: { serverTick: simulationSnapshot.serverTick },
+        },
+        async (payload) => payload,
+      );
+      await actor.saveSnapshot(simulationSnapshot);
+    } finally {
+      await store.close();
+    }
+
+    const restartedStore = PostgresWorldStore.fromConnectionString(databaseUrl);
+    try {
+      const recovery = await restartedStore.loadRecoveryBundle<typeof simulationSnapshot>(
+        worldId,
+      );
+      expect(recovery.worldRevision).toBe(1);
+      expect(recovery.snapshot?.state).toEqual(simulationSnapshot);
+      expect(recovery.snapshot?.revision).toBe(1);
+      expect(recovery.journal).toEqual([]);
+    } finally {
+      await restartedStore.close();
+    }
+  });
 });
