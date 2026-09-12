@@ -12,7 +12,24 @@ Game hướng đến chơi solo và co-op PvE trong các thế giới riêng, v�
 
 ## Trạng thái hiện tại
 
-**Giai đoạn thiết kế tiền sản xuất. Chưa có game có thể chơi, mã nguồn gameplay hoặc số liệu benchmark.**
+**Đã có prototype gameplay 0.1 trên nhánh này. Chưa đạt MVP đầy đủ và chưa có benchmark hiệu năng.**
+
+Prototype gồm một vùng 3D dạng greybox, thu thập, sửa cầu, cống tưới, cây trồng, xe giao hàng, 24 NPC và Chronicle. Máy chủ Node.js quyết định trạng thái; SQLite lưu world và biên nhận lệnh. Xem [hướng dẫn chạy và giới hạn](docs/06-playable-prototype.md).
+
+### Chạy thử
+
+Cài Node.js 24 trở lên, sau đó:
+
+```sh
+npm ci
+npm start
+```
+
+Mở `http://127.0.0.1:3000`. Dùng danh sách địa điểm để đi đến nguồn gỗ/đá, thu thập **8 gỗ + 4 đá**, sửa cầu rồi lấy thức ăn từ kho và giao cho Làng Hạ. `npm test` chạy kiểm thử mô phỏng và API.
+
+Đồng hồ prototype mặc định **×30** (một ngày game = một phút thực). Đặt `SIM_SPEED=1` để dùng nhịp 30 phút/ngày của thiết kế. Dữ liệu nằm trong `data/world.sqlite`; giữ thư mục này qua lần chạy lại.
+
+Có [Docker Compose](compose.yaml) cho một máy chủ với ổ dữ liệu bền vững. Đây chưa phải dịch vụ đã được đưa lên hosting.
 
 Game Design Bible v0.1 gồm 117 mục, 20 tình huống phát sinh, bản đồ tương tác hệ thống, phạm vi MVP và kế hoạch kiểm chứng. Các con số về quy mô, hiệu năng và tiến độ là mục tiêu hoặc giả định cần thử nghiệm, chưa phải kết quả đo.
 
@@ -46,7 +63,7 @@ Persistence không đồng nghĩa với mô phỏng mọi cá thể toàn thời
 
 ## Bước tiếp theo
 
-Đọc [phạm vi MVP](docs/04-persistence-and-production.md#99-mvp-scope), kiểm tra giả định nhân lực và làm prototype một vùng. Chuỗi cần chứng minh: xây dựng → nước/đường → nguồn thức ăn → quyết định NPC → lịch sử. Mã nguồn game sẽ được bắt đầu sau bước chốt nguồn lực và thử kiến trúc.
+Đọc [phạm vi MVP](docs/04-persistence-and-production.md#99-mvp-scope), kiểm tra giả định nhân lực và làm prototype một vùng. Chuỗi cần chứng minh: xây dựng → nước/đường → nguồn thức ăn → quyết định NPC → lịch sử. Prototype 0.1 là bước thử kiến trúc ban đầu; các khoảng cách tới MVP và thứ tự công việc tiếp theo được ghi trong [kế hoạch triển khai](docs/06-playable-prototype.md#khoảng-cách-tới-mvp).
 
 ## Quyền sử dụng
 

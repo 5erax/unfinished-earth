@@ -1,0 +1,20 @@
+{
+  "name": "unfinished-earth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Server-authoritative playable foundation for The Unfinished Earth",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test",
+    "check": "node --check src/server.js && node --check src/world.js && node --check public/app.js"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  }
+}

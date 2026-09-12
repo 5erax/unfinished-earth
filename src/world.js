@@ -1,0 +1,424 @@
+export const SIZE = 32;
+export const VERSION = 1;
+export const DAY_MS = 1_800_000;
+export const OFFLINE_MS = 72 * 3_600_000;
+export const CREDIT_MS = 8 * 3_600_000;
+export const POINTS = {
+  home: { x: 7, z: 22 },
+  bridge: { x: 16, z: 17 },
+  gate: { x: 14, z: 10 },
+  farm: { x: 10, z: 12 },
+  west: { x: 6, z: 8 },
+  east: { x: 24, z: 12 },
+  ruin: { x: 25, z: 25 },
+  depot: { x: 11, z: 19 },
+};
+const names = [
+  "An",
+  "Bình",
+  "Chi",
+  "Dũng",
+  "Giang",
+  "Hà",
+  "Hiền",
+  "Khánh",
+  "Lan",
+  "Minh",
+  "Nam",
+  "Oanh",
+  "Phúc",
+  "Quân",
+  "Sơn",
+  "Thảo",
+  "Trang",
+  "Tú",
+  "Vân",
+  "Việt",
+  "Xuân",
+  "Yến",
+  "Lâm",
+  "Mai",
+];
+export function event(w, kind, text, place, causes = []) {
+  const e = { id: ++w.eventSeq, day: w.day, kind, text, place, causes };
+  w.events.push(e);
+  return e.id;
+}
+export function createWorld(now = Date.now()) {
+  const w = {
+    schemaVersion: VERSION,
+    simVersion: VERSION,
+    revision: 0,
+    day: 1,
+    dayProgress: 0,
+    lastWall: now,
+    lastActive: now,
+    absenceStartedAt: null,
+    offlineUntil: null,
+    creditMs: 0,
+    gate: false,
+    bridge: false,
+    bridgeCause: null,
+    gateCause: null,
+    moisture: 0.35,
+    fish: 60,
+    grass: 70,
+    trees: 90,
+    grazers: 18,
+    predators: 4,
+    weather: "Nắng",
+    crop: 0,
+    depot: 24,
+    cart: { cargo: 0, progress: 0, status: "blocked" },
+    villages: [
+      { id: "west", name: "Làng Thượng", food: 72 },
+      { id: "east", name: "Làng Hạ", food: 18 },
+    ],
+    npcs: names.map((name, i) => ({
+      id: `npc-${i + 1}`,
+      name,
+      village: i < 12 ? "west" : "east",
+      job: i % 3 ? "Trồng trọt" : "Đánh cá",
+      hungryDays: 0,
+    })),
+    players: {},
+    resources: [],
+    eventSeq: 0,
+    events: [],
+    deliveries: 0,
+    harvests: 0,
+  };
+  for (let i = 0; i < 34; i++) {
+    const x = 2 + ((i * 7) % 27),
+      z = 2 + ((i * 11) % 27);
+    if (
+      (x >= 15 && x <= 17) ||
+      Object.values(POINTS).some((p) => Math.hypot(p.x - x, p.z - z) < 2)
+    )
+      continue;
+    w.resources.push({
+      id: `resource-${i}`,
+      type: i % 3 ? "wood" : "stone",
+      x,
+      z,
+      remaining: i % 3 ? 8 : 6,
+    });
+  }
+  // Nearby guaranteed resources make the first bridge possible without crossing the river.
+  w.resources.push(
+    { id: "home-wood", type: "wood", x: 6, z: 20, remaining: 16 },
+    { id: "home-stone", type: "stone", x: 9, z: 23, remaining: 12 },
+  );
+  event(
+    w,
+    "world",
+    "Mưa lớn cuốn mất cầu. Xe lương thực đang mắc ở bờ tây; Làng Hạ cần một tuyến tiếp tế.",
+    "bridge",
+  );
+  return w;
+}
+export function walkable(w, x, z) {
+  if (
+    !Number.isInteger(x) ||
+    !Number.isInteger(z) ||
+    x < 1 ||
+    z < 1 ||
+    x >= SIZE - 1 ||
+    z >= SIZE - 1
+  )
+    return false;
+  return x < 15 || x > 17 || (w.bridge && z === 17);
+}
+const requireThat = (condition, message) => {
+  if (!condition) throw new Error(message);
+};
+function near(p, target) {
+  requireThat(
+    Math.hypot(p.x - target.x, p.z - target.z) <= 2.5,
+    "Hãy đi đến gần địa điểm trước (tối đa 2 ô).",
+  );
+}
+function spend(p, wood, stone) {
+  requireThat(
+    p.bag.wood >= wood && p.bag.stone >= stone,
+    `Cần ${wood} gỗ và ${stone} đá.`,
+  );
+  p.bag.wood -= wood;
+  p.bag.stone -= stone;
+}
+export function join(w, id, now) {
+  if (w.players[id]) return;
+  w.players[id] = {
+    id,
+    name: `Người dựng làng ${Object.keys(w.players).length + 1}`,
+    ...POINTS.home,
+    bag: { wood: 0, stone: 0, food: 0 },
+    lastMove: 0,
+    lastGather: 0,
+    seen: now,
+    discoveries: [],
+  };
+}
+export function applyCommand(w, playerId, cmd, now = Date.now()) {
+  const p = w.players[playerId];
+  requireThat(p, "Phiên chơi đã hết hạn.");
+  requireThat(
+    cmd && typeof cmd === "object" && typeof cmd.type === "string",
+    "Lệnh không hợp lệ.",
+  );
+  let message = "";
+  if (cmd.type === "move") {
+    requireThat(now - p.lastMove >= 160, "Bạn đang di chuyển quá nhanh.");
+    requireThat(
+      walkable(w, cmd.x, cmd.z) &&
+        Math.abs(cmd.x - p.x) + Math.abs(cmd.z - p.z) === 1,
+      "Đường đi bị chặn. Hãy sửa cầu để qua sông.",
+    );
+    p.x = cmd.x;
+    p.z = cmd.z;
+    p.lastMove = now;
+  } else if (cmd.type === "gather") {
+    const r = w.resources.find((r) => r.id === cmd.target);
+    requireThat(r, "Không tìm thấy tài nguyên.");
+    near(p, r);
+    requireThat(
+      now - p.lastGather >= 500,
+      "Đợi một chút trước lần thu thập tiếp theo.",
+    );
+    requireThat(r.remaining > 0, "Nguồn này đã cạn.");
+    requireThat(
+      Object.values(p.bag).reduce((a, b) => a + b, 0) < 40,
+      "Túi đã đầy (40 đơn vị).",
+    );
+    r.remaining--;
+    p.bag[r.type]++;
+    p.lastGather = now;
+    if (r.type === "wood") w.trees = Math.max(0, w.trees - 0.25);
+    message = `Đã nhặt 1 ${r.type === "wood" ? "gỗ" : "đá"}.`;
+  } else if (cmd.type === "bridge") {
+    near(p, { x: 14, z: 17 });
+    requireThat(!w.bridge, "Cầu đã được sửa.");
+    spend(p, 8, 4);
+    w.bridge = true;
+    w.bridgeCause = event(
+      w,
+      "build",
+      "Cầu được sửa bằng 8 gỗ và 4 đá. Tuyến xe sang Làng Hạ đã thông.",
+      "bridge",
+      [1],
+    );
+    message = "Cầu đã thông. Xe bắt đầu giao hàng khi có tín dụng vận hành.";
+  } else if (cmd.type === "gate") {
+    near(p, POINTS.gate);
+    requireThat(typeof cmd.open === "boolean", "Trạng thái cống không hợp lệ.");
+    requireThat(cmd.open !== w.gate, "Cống đang ở trạng thái này.");
+    if (!w.gateCause) spend(p, 4, 2);
+    w.gate = cmd.open;
+    w.gateCause = event(
+      w,
+      "water",
+      w.gate
+        ? "Mở cống: ruộng nhận thêm nước; dòng sông hạ lưu giảm."
+        : "Đóng cống: khôi phục nước hạ lưu, ruộng phụ thuộc vào mưa.",
+      "gate",
+      w.gateCause ? [w.gateCause] : [],
+    );
+    message = w.gate ? "Đã mở cống tưới." : "Đã đóng cống tưới.";
+  } else if (cmd.type === "harvest") {
+    near(p, POINTS.farm);
+    requireThat(
+      w.crop >= 1,
+      "Cây chưa chín. Hãy điều tiết nước và chờ vụ mới.",
+    );
+    const yieldCount = Math.floor(8 + 12 * w.moisture);
+    w.depot += yieldCount;
+    w.crop = 0;
+    w.harvests++;
+    event(
+      w,
+      "food",
+      `Thu hoạch ${yieldCount} khẩu phần, chuyển vào kho chung.`,
+      "farm",
+      w.gateCause ? [w.gateCause] : [],
+    );
+    message = `Đã đưa ${yieldCount} khẩu phần vào kho.`;
+  } else if (cmd.type === "supply") {
+    near(p, POINTS.depot);
+    requireThat(w.depot > 0, "Kho đã hết lương thực.");
+    const amount = Math.min(
+      8,
+      w.depot,
+      40 - Object.values(p.bag).reduce((a, b) => a + b, 0),
+    );
+    requireThat(amount > 0, "Túi đã đầy.");
+    w.depot -= amount;
+    p.bag.food += amount;
+    message = `Đã lấy ${amount} khẩu phần từ kho.`;
+  } else if (cmd.type === "donate") {
+    requireThat(
+      cmd.target === "west" || cmd.target === "east",
+      "Làng không hợp lệ.",
+    );
+    near(p, POINTS[cmd.target]);
+    requireThat(p.bag.food > 0, "Bạn chưa mang thức ăn.");
+    const v = w.villages.find((v) => v.id === cmd.target);
+    const amount = p.bag.food;
+    v.food += amount;
+    p.bag.food = 0;
+    event(
+      w,
+      "food",
+      `${p.name} giao ${amount} khẩu phần cho ${v.name}.`,
+      cmd.target,
+      w.bridgeCause ? [w.bridgeCause] : [],
+    );
+    message = "Đã giao thức ăn.";
+  } else if (cmd.type === "explore") {
+    near(p, POINTS.ruin);
+    requireThat(!p.discoveries.includes("ruin"), "Bạn đã đọc dấu tích này.");
+    p.discoveries.push("ruin");
+    event(
+      w,
+      "knowledge",
+      "Tìm thấy vạch đo nước cũ ở tàn tích: lấy nước tưới quá lâu có thể làm giảm đàn cá hạ lưu.",
+      "ruin",
+    );
+    message = "Đã ghi lại tri thức về mực nước.";
+  } else {
+    throw new Error("Lệnh không được hỗ trợ.");
+  }
+  p.seen = now;
+  return message;
+}
+export function simulateDay(w, production = true) {
+  w.day++;
+  const phase = (w.day - 1) % 12;
+  w.weather =
+    phase === 5 || phase === 6 ? "Mưa lớn" : phase >= 9 ? "Hạn" : "Nắng";
+  const rain =
+    w.weather === "Mưa lớn" ? 0.22 : w.weather === "Hạn" ? -0.12 : 0.025;
+  w.moisture = Math.max(
+    0,
+    Math.min(1, w.moisture + rain + (w.gate ? 0.16 : -0.045)),
+  );
+  w.fish = Math.max(
+    0,
+    Math.min(100, w.fish + (w.gate ? -5 : 3) + (w.weather === "Hạn" ? -2 : 0)),
+  );
+  w.grass = Math.max(0, Math.min(100, w.grass + 4 * w.moisture - 1.5));
+  w.grazers = Math.max(
+    0,
+    Math.min(30, w.grazers + (w.grass > 40 ? 0.3 : -0.5)),
+  );
+  w.predators = Math.max(
+    0,
+    Math.min(8, w.predators + (w.grazers > 12 ? 0.08 : -0.12)),
+  );
+  w.crop = Math.min(1, w.crop + w.moisture * 0.4);
+  if (production && w.bridge) {
+    if (w.cart.cargo === 0) {
+      const amount = Math.min(8, w.depot);
+      w.depot -= amount;
+      w.cart.cargo = amount;
+      w.cart.progress = 0;
+    }
+    if (w.cart.cargo > 0) {
+      w.cart.progress++;
+      if (w.cart.progress >= 2) {
+        const amount = w.cart.cargo;
+        w.villages[1].food += amount;
+        w.cart.cargo = 0;
+        w.cart.progress = 0;
+        w.deliveries++;
+        event(
+          w,
+          "logistics",
+          `Xe giao ${amount} khẩu phần từ kho đến Làng Hạ. Không còn hàng trên xe.`,
+          "east",
+          w.bridgeCause ? [w.bridgeCause] : [],
+        );
+      }
+    }
+  }
+  w.cart.status = !w.bridge
+    ? "blocked"
+    : !production
+      ? "resting"
+      : w.cart.cargo
+        ? "transit"
+        : w.depot
+          ? "ready"
+          : "empty";
+  // Snapshot decisions prevent an NPC migrating twice in one day.
+  const decisions = [];
+  for (const v of w.villages) {
+    const people = w.npcs.filter((n) => n.village === v.id);
+    const fishers = people.filter((n) => n.job === "Đánh cá").length;
+    const produced = Math.floor(
+      (fishers * w.fish) / 100 + (people.length - fishers) * w.moisture * 0.7,
+    );
+    v.food += produced;
+    const fed = Math.min(people.length, v.food);
+    v.food -= fed;
+    const shortage = fed < people.length;
+    for (const n of people) {
+      n.hungryDays = shortage ? n.hungryDays + 1 : 0;
+      if (n.hungryDays >= 3) {
+        const destination = w.villages.find((other) => other.id !== v.id);
+        if (w.bridge && destination.food > 24)
+          decisions.push({ n, destination });
+        else if (n.job === "Đánh cá" && w.moisture > 0.6) {
+          n.job = "Trồng trọt";
+          n.hungryDays = 0;
+          event(
+            w,
+            "npc",
+            `${n.name} chuyển từ đánh cá sang trồng trọt sau ba ngày thiếu ăn, khi ruộng đủ ẩm.`,
+            v.id,
+            w.gateCause ? [w.gateCause] : [],
+          );
+        }
+      }
+    }
+  }
+  for (const { n, destination } of decisions) {
+    const from = n.village;
+    n.village = destination.id;
+    n.hungryDays = 0;
+    event(
+      w,
+      "npc",
+      `${n.name} rời ${from === "east" ? "Làng Hạ" : "Làng Thượng"} đến ${destination.name}: thiếu ăn ba ngày, làng nhận còn dự trữ và cầu đã thông.`,
+      destination.id,
+      w.bridgeCause ? [w.bridgeCause] : [],
+    );
+  }
+}
+export function advance(w, now, active, speed = 30) {
+  requireThat(now >= w.lastWall, "Đồng hồ máy chủ đi lùi.");
+  if (active) {
+    // Process the prior absence before resuming, using its original deadline.
+    if (w.absenceStartedAt !== null) advance(w, now, false, speed);
+    w.absenceStartedAt = null;
+    w.offlineUntil = null;
+    w.lastActive = now;
+  } else if (w.absenceStartedAt === null) {
+    w.absenceStartedAt = w.lastWall;
+    w.offlineUntil = w.lastWall + OFFLINE_MS;
+  }
+  const end = active ? now : Math.min(now, w.offlineUntil);
+  let elapsed = Math.max(0, end - w.lastWall);
+  // Max 4320 simulated days per absence at prototype speed 30; no per-frame loop.
+  while (elapsed > 0) {
+    const slice = Math.min(elapsed, (DAY_MS - w.dayProgress) / speed);
+    const working = active || w.creditMs >= slice;
+    if (!active) w.creditMs = Math.max(0, w.creditMs - slice);
+    w.dayProgress += slice * speed;
+    elapsed -= slice;
+    if (w.dayProgress >= DAY_MS - 0.001) {
+      w.dayProgress = 0;
+      simulateDay(w, working);
+    }
+  }
+  w.lastWall = now;
+}

@@ -1,0 +1,109 @@
+# Prototype gameplay 0.1
+
+## Mục đích và phạm vi thực tế
+
+Kiểm chứng chuỗi nhỏ có thể thao tác: lấy vật liệu → sửa cầu → vận chuyển thức ăn → NPC đổi nghề/nơi sống → xem lại nguyên nhân. Đây là mốc khởi đầu cho MVP ở mục 99, không phải tuyên bố hoàn thành MVP 16–24 tuần.
+
+| Hệ thống | Đã triển khai | Chưa nghiệm thu / còn thiếu |
+| --- | --- | --- |
+| Client | Three.js trực giao, xoay 90°, nhân vật, click chọn vật thể, WASD, tìm đường và bảng tương tác tiếng Việt | Visual QA bị chặn trong môi trường triển khai; chưa đo FPS, chưa có art/audio hoàn chỉnh |
+| Vùng | Lưới 32 × 32 đại diện 512 × 512 m, hai làng, một ruin | Bước di chuyển theo ô là abstraction của greybox; chưa đạt vận tốc, va chạm và navmesh của thiết kế |
+| Xây dựng | Cầu cố định 8 gỗ/4 đá, cống cố định 4 gỗ/2 đá | Chưa có placement tự do, 8 building definitions, nhà một tầng tùy chỉnh, condition/repair |
+| Hậu cần | Túi 40 đơn vị, kho chung, xe chở 8 khẩu phần trong hai ngày | Xe dùng tiến độ theo ngày, chưa pathfind vật lý; chưa có cầu hỏng giữa chuyến và cargo recovery |
+| Sinh thái | Cống → độ ẩm/cá → crop, cỏ, grazer/predator; chu kỳ nắng/mưa/hạn | Là chỉ số thử nghiệm, chưa ledger nước m³, lũ không gian, sinh vật có reservation/ID, LOD hoặc seed đa dạng |
+| NPC | 24 danh tính; ăn, đổi nghề khi thiếu ăn ba ngày và ruộng đủ ẩm; di cư khi có cầu và làng nhận còn dự trữ | Chưa housing capacity, cooldown đầy đủ, tuổi đời hoặc hành vi đi lại vật lý |
+| Save | SQLite WAL/FULL; snapshot và biên nhận commandId cùng transaction trước phản hồi; session giữ qua restart | Chưa SIGKILL/power-loss drill, migration, rollback, compaction hoặc sổ giao dịch đầy đủ theo thiết kế |
+| Co-op | Cùng một world trên một server; cookie phiên, polling hai giây; giới hạn 8 kết nối gần nhất | Đã kiểm thử hai phiên tranh item qua HTTP; chưa playtest 1–4 người, stress 8 AOI, WebSocket hay network budget |
+| Offline | Một deadline 72 giờ từ đầu vắng; xe ngừng khi hết tín dụng 8 giờ; reconnect không tự cộng tín dụng | Credit tiêu theo lát thời gian đến cuối ngày; chưa production theo giây, equivalence toàn ledger hay mọi edge case T07–T11 |
+| Chronicle | Event có ID/ngày/địa điểm/causeIds; tồn tại qua save; client xem 60 gần nhất và tra nguyên nhân cũ | Chưa quyền biết, evidence certainty hoặc lịch sử truy vấn/phân trang đầy đủ |
+
+Các khác biệt ở cột cuối là khoảng trống triển khai, không thay thế các quyết định A01–A13 của Game Design Bible. Render nhà cố định chỉ giúp định vị; không suy ra đã có hệ thống xây nhà. Không có chiến đấu hoặc tiền tệ ở bản này.
+
+## Chạy trên máy cá nhân
+
+Yêu cầu Node.js >=24 (dùng `node:sqlite` tích hợp) và npm. Không cần dịch vụ DB bên ngoài.
+
+```sh
+npm ci
+npm run check
+npm test
+npm start
+```
+
+Mở `http://127.0.0.1:3000`. Máy chủ mặc định chỉ bind loopback. `npm run dev` bật tự khởi động lại khi sửa mã máy chủ.
+
+| Biến | Mặc định | Ý nghĩa |
+| --- | --- | --- |
+| HOST | 127.0.0.1 | Địa chỉ lắng nghe |
+| PORT | 3000 | Cổng HTTP |
+| DATA_DIR | thư mục data của repo | Thư mục chứa world.sqlite và WAL |
+| SIM_SPEED | 30 | 1–30; 30 là một ngày game/phút, 1 là nhịp thiết kế |
+| WORLD_ACCESS_CODE | rỗng trên loopback | Bắt buộc >=16 ký tự khi bind ra mạng |
+
+Máy chủ không tự đọc `.env` khi chạy `npm start`; shell dùng biến môi trường, hoặc `node --env-file=.env src/server.js`. Docker Compose đọc `.env` trực tiếp. Không thay SIM_SPEED giữa một phép đối chiếu online/offline.
+
+## Chuỗi chơi đầu tiên
+
+1. Vào thung lũng. Chọn **Gỗ gần nhà** → **Đi đến địa điểm** → thu thập ít nhất 8 gỗ.
+2. Chọn **Đá gần nhà**, đi đến và lấy 4 đá.
+3. Chọn **Cầu đá cũ**, đi đến bờ tây, sửa cầu. Vật liệu trừ đúng một lần.
+4. Chọn **Kho và xe kéo**, lấy thức ăn. Đến **Làng Hạ**, giao thức ăn; hoặc chờ xe giao khi cầu đã thông và kho còn hàng.
+5. Lấy thêm 4 gỗ + 2 đá, đến **Cống tưới** và mở. Quan sát độ ẩm tăng và cá giảm qua ngày.
+6. Đến **Ruộng chung**, thu hoạch khi cây đạt 100% để bổ sung kho. Tới **Tàn tích** để đọc dấu tích.
+7. Mở Chronicle, bấm **Nguyên nhân #…** để xem sự kiện nguồn. Tải lại trang/khởi động lại máy chủ và tiếp tục bằng cùng cookie.
+
+Không có nút reset thế giới. Save thuộc máy chủ; xóa cookie làm mất khả năng quay lại nhân vật cũ bằng giao diện hiện tại. Tạo nhiều phiên dùng chung kho thế giới, không sinh vật phẩm ban đầu.
+
+## Lưu trữ, bảo toàn và vận hành
+
+Một tiến trình Node là một world actor: không có `await` giữa kiểm tra, thay đổi state và COMMIT của giao dịch. Các lệnh hợp lệ chỉ nhận `type`, tham số hành động và `commandId`; máy chủ không nhận inventory/state từ client. Gửi lại cùng ID của cùng người chơi trả lại biên nhận cũ, cả khi lần đầu bị từ chối. Client thử lại một lần bằng cùng ID khi lỗi mạng.
+
+World snapshot và receipt cùng nằm trong một transaction SQLite. `synchronous=FULL` phụ thuộc sự bảo đảm fsync của filesystem/host. Kiểm thử reopen không thay cho phép thử mất điện. Một ổ dữ liệu chỉ dùng bởi **một instance** server. Không chạy nhiều replica với snapshot trong RAM.
+
+Tín dụng hoạt động tính theo khoảng cách giữa lệnh hợp lệ toàn nhóm, tối đa 5 giây mỗi khoảng; khoảng dài hơn 5 giây không cộng. Heartbeat/reconnect không cộng. Đây là xấp xỉ hoạt động, chưa chống AFK tự động hoàn chỉnh. Mô phỏng vùng vẫn phát triển tối đa 72 giờ thực khi vắng, xe vận hành chỉ khi còn tín dụng. Nhà/túi người chơi không bị hỏng hay mất do logout ở mô hình này.
+
+Command receipts, Chronicle và player records hiện chưa được cắt gọn; snapshot tăng theo thời gian và được lưu mỗi giây. Trước chạy world dài hạn phải bổ sung retention/compaction, giới hạn tạo phiên và đo dung lượng/tick latency. NPC nội bộ vẫn sản xuất thức ăn khi offline; work credit hiện áp dụng cho xe/kho hoạt động của nhóm, không phải toàn xã hội.
+
+## Chạy bằng Docker trên máy chủ riêng
+
+Tạo `.env` từ `.env.example`, đặt mã thế giới riêng ít nhất 16 ký tự, rồi:
+
+```sh
+docker compose up -d --build
+docker compose logs --tail=50 earth
+```
+
+Compose chỉ mở `127.0.0.1:3000` trên host. Đặt HTTPS reverse proxy phía trước cổng này để chơi từ xa; chuyển tiếp Host gốc và `X-Forwarded-Proto: https`. Chia sẻ mã thế giới với nhóm thử nghiệm qua kênh riêng. Cookie là HttpOnly/SameSite=Strict, Secure khi qua HTTPS. Thay access code chưa thu hồi session đang tồn tại: cơ chế quản lý/thu hồi thành viên chưa được làm.
+
+Dùng volume `earth-data`; không dùng filesystem tạm của serverless cho SQLite. Không chạy `docker compose down -v` nếu muốn giữ save. Bản này chưa phù hợp GitHub Pages hoặc chức năng serverless không có ổ bền vững. Chưa build/chạy image Docker trong phiên phát triển này; cần smoke test trên host đích trước đưa cho người chơi.
+
+Sao lưu an toàn: dừng container để đóng DB, sao chép **toàn bộ volume** sang nơi lưu khác, rồi khởi động lại. Khôi phục vào volume mới, giữ cùng schemaVersion/simVersion, mở trên bản sao và xác minh nhân vật, túi, cầu, kho, NPC, Chronicle. Chưa có script migration; bản không khớp version sẽ từ chối mở save.
+
+## Bằng chứng kiểm thử
+
+`npm run check` và `npm test` chạy trên Node.js 24.19.0. Các kiểm thử bao phủ:
+
+- Chặn teleport, qua sông trước khi có cầu và move quá nhanh.
+- Hai người tranh vật phẩm cuối: đúng một thành công.
+- Xây cầu tiêu vật liệu một lần; xe không nhân đôi cargo.
+- Can thiệp nước tạo khác biệt sinh thái, không âm thức ăn và giữ 24 ID NPC.
+- Vắng nhiều đợt vượt 72 giờ không gia hạn deadline; hết credit không giao hàng.
+- Snapshot + receipt tồn tại qua đóng/mở SQLite.
+- HTTP: cookie, command retry trước/sau restart, không lộ túi người khác, chặn cross-origin POST.
+- Luồng hoàn chỉnh qua HTTP từ túi rỗng: thu thập → sửa → qua cầu → giao → mở cống → thu hoạch.
+
+**Chưa kiểm chứng:** hình ảnh, thao tác trình duyệt, FPS/mobile, crash ngay sau ACK, Docker runtime, hosting, stress test tám người và tất cả T01–T15. Trình duyệt của môi trường phát triển chặn địa chỉ localhost; không dùng kết quả API để tuyên bố browser QA đã đạt.
+
+## Khoảng cách tới MVP
+
+| Thứ tự | Công việc tiếp theo | Điều kiện hoàn thành |
+| --- | --- | --- |
+| P0 | Playtest trực quan desktop trên host chạy được | Hoàn thành luồng chơi bằng giao diện; không lỗi WebGL, clip UI hoặc điều khiển |
+| P0 | Save hardening và restore drill | Crash sau ACK, migration/rollback và replay không mất/nhân đồ; compaction có giới hạn |
+| P0 | Nước và offline có đơn vị chuẩn | Ledger m³, tín dụng theo giây và online/catch-up đáp ứng tolerance phụ lục C |
+| P1 | Co-op transport và quyền nhóm | 1–4 người chơi thật, rồi tám AOI đạt tick/bandwidth gate; quản lý session/thành viên |
+| P1 | Xây dựng và logistics thực | Đặt 8 definitions, collision, bridge failure giữa chuyến, cargo reservation/recovery |
+| P1 | Sinh thái và NPC đầy đủ | Nước/lũ theo không gian, animal reservation, housing/cooldown và nhu cầu NPC |
+| P2 | Art/UI/audio và playtest nhân quả | Tối thiểu 8/10 người thử giải thích đúng nguyên nhân và cách phản ứng |
+
+Nhân lực, ngân sách và host vận hành chưa được xác định trong repo. Cần chốt các yếu tố đó trước khi gán lịch nghiệm thu MVP; không diễn giải phạm vi prototype này thành cam kết thời gian mới.

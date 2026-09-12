@@ -1,5 +1,11 @@
 # Lịch sử thay đổi
 
+## 2026-09-12 — Prototype gameplay 0.1
+
+Thêm client 3D trực giao và máy chủ Node.js/SQLite. Nối thu thập → sửa cầu → vận chuyển thức ăn, cùng cống tưới → ruộng/cá → nghề và di cư NPC → Chronicle. Bổ sung kiểm thử lệnh lặp, tranh vật phẩm, save/restart và chuỗi chơi qua HTTP; cấu hình CI, Docker và hướng dẫn vận hành.
+
+Đây là thử nghiệm nền tảng đầu tiên, chưa nghiệm thu MVP, chưa triển khai hosting và chưa xác minh giao diện bằng trình duyệt. Bộ thiết kế v0.1 cùng các bản xuất vẫn là tài liệu mục tiêu; không sửa chúng để coi phạm vi thử nghiệm nhỏ hơn là MVP hoàn tất.
+
 ## 2026-09-11 — Game Design Bible v0.1
 
 Bổ sung 117 mục theo cấu trúc concept, chia thành năm chương có thể đọc trực tiếp trên GitHub. Tài liệu xác định luật nhân vật, xây dựng, hậu cần, sinh thái, NPC, kinh tế, tri thức, offline và lưu trữ; kèm 20 tình huống phát sinh, bản đồ tương tác, sổ quyết định và tiêu chí prototype.

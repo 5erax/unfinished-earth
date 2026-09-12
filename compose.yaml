@@ -1,0 +1,14 @@
+services:
+  earth:
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      WORLD_ACCESS_CODE: ${WORLD_ACCESS_CODE:?Set a private world access code with at least 16 characters}
+      SIM_SPEED: ${SIM_SPEED:-30}
+    volumes:
+      - earth-data:/data
+    restart: unless-stopped
+    stop_grace_period: 15s
+volumes:
+  earth-data:
