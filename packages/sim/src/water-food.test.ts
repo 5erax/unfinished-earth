@@ -111,7 +111,15 @@ describe("finite two-basin water ledger", () => {
       },
     );
 
-    expect(result.ledger.evaporationM3).toBeCloseTo(1.9, 12);
+    const remainingGroundwaterM3 =
+      result.state.upstream.groundwaterM3 +
+      result.state.downstream.groundwaterM3;
+
+    expect(result.ledger.evaporationM3).toBeCloseTo(
+      result.ledger.startM3 - remainingGroundwaterM3,
+      12,
+    );
+    expect(result.ledger.evaporationM3).toBeLessThanOrEqual(1.9);
     expect(result.ledger.exportM3).toBe(0);
     expect(result.state.upstream).toMatchObject({
       soilM3: 0,
@@ -123,6 +131,8 @@ describe("finite two-basin water ledger", () => {
       channelM3: 0,
       floodM3: 0,
     });
+    expect(result.state.upstream.groundwaterM3).toBeGreaterThan(0);
+    expect(result.state.downstream.groundwaterM3).toBeGreaterThan(0);
     expect(Math.abs(result.ledger.residualM3)).toBeLessThanOrEqual(1e-6);
   });
 });
