@@ -12,6 +12,7 @@ export const worlds = pgTable("worlds", {
   id: text("id").primaryKey(),
   revision: bigint("revision", { mode: "bigint" }).notNull().default(0n),
   fencingToken: bigint("fencing_token", { mode: "bigint" }).notNull().default(0n),
+  ownerId: text("owner_id"),
   simVersion: text("sim_version").notNull(),
   contentVersion: text("content_version").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -41,3 +42,15 @@ export const eventOutbox = pgTable("event_outbox", {
   publishStatus: text("publish_status").notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const worldSnapshots = pgTable(
+  "world_snapshots",
+  {
+    worldId: text("world_id").notNull(),
+    worldRevision: bigint("world_revision", { mode: "bigint" }).notNull(),
+    fencingToken: bigint("fencing_token", { mode: "bigint" }).notNull(),
+    state: jsonb("state").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.worldId, table.worldRevision] })],
+);
