@@ -135,28 +135,63 @@ describeDatabase("durable simulation boundary replay", () => {
       },
     );
     expect(duplicate).toMatchObject({ revision: 2, duplicate: true });
+
+    const boundary3 = advancePrototypeBoundary(boundary2, {
+      transferM3: 20,
+      cropDelta: 1,
+    });
+    const committed3 = await firstActor.execute(
+      {
+        commandId: randomUUID(),
+        intent: SIMULATION_BOUNDARY_INTENT,
+        payload: { boundaryId: "hour:3" },
+      },
+      async () => ({
+        state: boundary3,
+        boundaryId: "hour:3",
+        serverTick: boundary3.serverTick,
+      }),
+      ({ result }) => [
+        {
+          eventType: SIMULATION_BOUNDARY_EVENT,
+          payload: result,
+          causeIds: ["weather:rain-sample"],
+        },
+      ],
+    );
+    expect(committed3.revision).toBe(3);
     await firstStore.close();
 
     const restartedStore = PostgresWorldStore.fromConnectionString(databaseUrl);
     try {
       const restartedActor = await WorldActor.create(worldId, restartedStore);
-      expect(restartedActor.revision).toBe(2);
+      expect(restartedActor.revision).toBe(3);
 
       const bundle =
         await restartedStore.loadRecoveryBundle<PrototypeDomainState>(worldId);
       const replayed = replaySimulationState(bundle);
 
       expect(bundle.snapshot).toMatchObject({ revision: 1, state: boundary1 });
-      expect(bundle.journal).toHaveLength(1);
-      expect(bundle.journal[0]).toMatchObject({
-        eventType: SIMULATION_BOUNDARY_EVENT,
-        causeIds: ["gate:upstream"],
-      });
+      expect(bundle.journal).toHaveLength(2);
+      expect(bundle.journal).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            revision: 2,
+            eventType: SIMULATION_BOUNDARY_EVENT,
+            causeIds: ["gate:upstream"],
+          }),
+          expect.objectContaining({
+            revision: 3,
+            eventType: SIMULATION_BOUNDARY_EVENT,
+            causeIds: ["weather:rain-sample"],
+          }),
+        ]),
+      );
       expect(replayed).toEqual({
-        state: boundary2,
-        revision: 2,
-        serverTick: 2,
-        appliedBoundaryIds: ["hour:2"],
+        state: boundary3,
+        revision: 3,
+        serverTick: 3,
+        appliedBoundaryIds: ["hour:2", "hour:3"],
       });
 
       const pool = new Pool({ connectionString: databaseUrl });
@@ -169,7 +204,7 @@ describeDatabase("durable simulation boundary replay", () => {
           `,
           [worldId, SIMULATION_BOUNDARY_EVENT],
         );
-        expect(Number(events.rows[0]?.count ?? 0)).toBe(2);
+        expect(Number(events.rows[0]?.count ?? 0)).toBe(3);
       } finally {
         await pool.end();
       }
