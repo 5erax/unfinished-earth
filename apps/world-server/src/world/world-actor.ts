@@ -1,16 +1,33 @@
+import type { PostgresWorldStore } from "./postgres-world-store.js";
+
 export type WorldCommand<TPayload = unknown> = {
   commandId: string;
+  intent: string;
   payload: TPayload;
 };
 
 export type WorldCommandResult<TResult = unknown> = {
   revision: number;
   result: TResult;
+  duplicate: boolean;
 };
 
 export class WorldActor {
-  #revision = 0;
+  #revision: number;
   #queue: Promise<void> = Promise.resolve();
+
+  private constructor(
+    private readonly worldId: string,
+    private readonly store: PostgresWorldStore,
+    revision: number,
+  ) {
+    this.#revision = revision;
+  }
+
+  static async create(worldId: string, store: PostgresWorldStore) {
+    const revision = await store.loadRevision(worldId);
+    return new WorldActor(worldId, store, revision);
+  }
 
   get revision() {
     return this.#revision;
@@ -18,7 +35,10 @@ export class WorldActor {
 
   async execute<TPayload, TResult>(
     command: WorldCommand<TPayload>,
-    handler: (payload: TPayload, currentRevision: number) => Promise<TResult> | TResult,
+    handler: (
+      payload: TPayload,
+      currentRevision: number,
+    ) => Promise<TResult> | TResult,
   ): Promise<WorldCommandResult<TResult>> {
     let release!: () => void;
     const previous = this.#queue;
@@ -29,9 +49,18 @@ export class WorldActor {
     await previous;
 
     try {
-      const result = await handler(command.payload, this.#revision);
-      this.#revision += 1;
-      return { revision: this.#revision, result };
+      const response = await this.store.executeCommand(
+        {
+          worldId: this.worldId,
+          commandId: command.commandId,
+          intent: command.intent,
+          payload: command.payload,
+        },
+        handler,
+      );
+
+      this.#revision = Math.max(this.#revision, response.revision);
+      return response;
     } finally {
       release();
     }
