@@ -239,3 +239,4 @@ export function catchUpOfflineTo(
 }
 
 export * from "./water-food.js";
+export * from "./settlement-food.js";
