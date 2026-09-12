@@ -49,6 +49,19 @@ export type DurableCommandResult<TResult> = {
   duplicate: boolean;
 };
 
+export type DurableDomainEvent = {
+  eventType: string;
+  payload: unknown;
+  causeIds?: string[];
+};
+
+export type DurableEventProjector<TPayload, TResult> = (context: {
+  command: DurableCommand<TPayload>;
+  result: TResult;
+  currentRevision: number;
+  nextRevision: number;
+}) => DurableDomainEvent[];
+
 export type WorldOwnership = {
   ownerId: string;
   revision: number;
@@ -128,6 +141,31 @@ function requestHash(intent: string, payload: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify([intent, payload]))
     .digest("hex");
+}
+
+function serializeJson(value: unknown, label: string): string {
+  const json = JSON.stringify(value);
+  if (json === undefined) {
+    throw new Error(`${label} must be JSON serializable.`);
+  }
+  return json;
+}
+
+function validateProjectedEvents(events: DurableDomainEvent[]) {
+  if (events.length === 0) {
+    throw new Error("Every durable command must project at least one journal event.");
+  }
+
+  for (const event of events) {
+    if (!event.eventType.trim()) {
+      throw new Error("Projected eventType must be non-empty.");
+    }
+    serializeJson(event.payload, `Projected event ${event.eventType} payload`);
+    const causeIds = event.causeIds ?? [];
+    if (!causeIds.every((causeId) => typeof causeId === "string" && causeId.length > 0)) {
+      throw new Error(`Projected event ${event.eventType} has invalid causeIds.`);
+    }
+  }
 }
 
 async function ensureWorld(client: PoolClient, worldId: string) {
@@ -230,10 +268,7 @@ export class PostgresWorldStore {
     revision: number,
     state: TState,
   ): Promise<void> {
-    const stateJson = JSON.stringify(state);
-    if (stateJson === undefined) {
-      throw new Error("World snapshots must be JSON serializable.");
-    }
+    const stateJson = serializeJson(state, "World snapshot");
 
     const client = await this.pool.connect();
     try {
@@ -351,6 +386,7 @@ export class PostgresWorldStore {
       payload: TPayload,
       currentRevision: number,
     ) => Promise<TResult> | TResult,
+    projectEvents?: DurableEventProjector<TPayload, TResult>,
   ): Promise<DurableCommandResult<TResult>> {
     const client = await this.pool.connect();
     const scope = `world:${command.worldId}`;
@@ -396,11 +432,24 @@ export class PostgresWorldStore {
       const currentRevision = toSafeRevision(world.revision);
       const result = await handler(command.payload, currentRevision);
       const nextRevision = currentRevision + 1;
-      const resultJson = JSON.stringify(result);
+      const resultJson = serializeJson(result, "Durable command result");
 
-      if (resultJson === undefined) {
-        throw new Error("Durable command results must be JSON serializable.");
-      }
+      const projectedEvents = projectEvents
+        ? projectEvents({ command, result, currentRevision, nextRevision })
+        : [
+            {
+              eventType: command.intent,
+              payload: {
+                commandId: command.commandId,
+                fencingToken: command.fencingToken,
+                intent: command.intent,
+                payload: command.payload,
+                result,
+              },
+              causeIds: [],
+            } satisfies DurableDomainEvent,
+          ];
+      validateProjectedEvents(projectedEvents);
 
       const worldUpdate = await client.query(
         `
@@ -423,25 +472,37 @@ export class PostgresWorldStore {
         [scope, command.commandId, hash, resultJson, nextRevision],
       );
 
-      const eventId = createHash("sha256")
-        .update(`${scope}:${nextRevision}:${command.commandId}`)
-        .digest("hex");
-      const eventPayload = JSON.stringify({
-        commandId: command.commandId,
-        fencingToken: command.fencingToken,
-        intent: command.intent,
-        payload: command.payload,
-        result,
-      });
+      for (const [eventIndex, event] of projectedEvents.entries()) {
+        const eventId = createHash("sha256")
+          .update(
+            `${scope}:${nextRevision}:${command.commandId}:${eventIndex}:${event.eventType}`,
+          )
+          .digest("hex");
+        const eventPayloadJson = serializeJson(
+          event.payload,
+          `Projected event ${event.eventType} payload`,
+        );
+        const causeIdsJson = serializeJson(
+          event.causeIds ?? [],
+          `Projected event ${event.eventType} causeIds`,
+        );
 
-      await client.query(
-        `
-          INSERT INTO event_outbox
-            (event_id, world_id, world_revision, event_type, payload, cause_ids)
-          VALUES ($1, $2, $3, $4, $5::jsonb, '[]'::jsonb)
-        `,
-        [eventId, command.worldId, nextRevision, command.intent, eventPayload],
-      );
+        await client.query(
+          `
+            INSERT INTO event_outbox
+              (event_id, world_id, world_revision, event_type, payload, cause_ids)
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+          `,
+          [
+            eventId,
+            command.worldId,
+            nextRevision,
+            event.eventType,
+            eventPayloadJson,
+            causeIdsJson,
+          ],
+        );
+      }
 
       await client.query("COMMIT");
       return { revision: nextRevision, result, duplicate: false };
