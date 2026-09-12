@@ -137,7 +137,7 @@ function chooseNextKind(
     }
   }
 
-  return WEATHER_KINDS[WEATHER_KINDS.length - 1];
+  return "rain";
 }
 
 export function createWeatherState(options: {
