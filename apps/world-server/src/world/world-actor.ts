@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { PostgresWorldStore } from "./postgres-world-store.js";
+import type {
+  DurableEventProjector,
+  PostgresWorldStore,
+} from "./postgres-world-store.js";
 
 export type WorldCommand<TPayload = unknown> = {
   commandId: string;
@@ -61,6 +64,7 @@ export class WorldActor {
       payload: TPayload,
       currentRevision: number,
     ) => Promise<TResult> | TResult,
+    projectEvents?: DurableEventProjector<TPayload, TResult>,
   ): Promise<WorldCommandResult<TResult>> {
     let release!: () => void;
     const previous = this.#queue;
@@ -80,6 +84,7 @@ export class WorldActor {
           payload: command.payload,
         },
         handler,
+        projectEvents,
       );
 
       this.#revision = Math.max(this.#revision, response.revision);
