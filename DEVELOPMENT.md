@@ -1,6 +1,6 @@
 # Development
 
-This repository now contains the architecture-spike scaffold for **The Unfinished Earth**. It is not yet a playable build.
+This repository contains the architecture-spike scaffold for **The Unfinished Earth**. It is not yet a playable build.
 
 ## Requirements
 
@@ -13,12 +13,13 @@ This repository now contains the architecture-spike scaffold for **The Unfinishe
 
 ```bash
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
 docker compose up -d postgres
 cp .env.example .env
+pnpm db:migrate
 ```
 
-The first registry-enabled install should generate `pnpm-lock.yaml`. Commit that lockfile once generated and then switch CI to `pnpm install --frozen-lockfile`.
+The lockfile is committed and CI uses `pnpm install --frozen-lockfile`. pnpm build scripts remain allow-listed narrowly; the current release-age exception is pinned to one reviewed `@types/three` version instead of disabling the supply-chain policy globally.
 
 ## Run the spikes
 
@@ -29,13 +30,25 @@ pnpm dev:client
 
 The client defaults to Vite's local URL. The world server listens on `127.0.0.1:8787` unless overridden.
 
+The current WebSocket persistence spike accepts a `spike-write` message with a client-generated `commandId`. Retrying the same command ID with the same request returns the committed receipt; reusing it with a different request is rejected.
+
 ## Verification
 
+With PostgreSQL running and `DATABASE_URL` set:
+
 ```bash
+pnpm db:migrate
 pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+CI starts PostgreSQL 18, applies the bootstrap migration, then runs the same typecheck/test/build gates. The world-server integration suite currently verifies:
+
+- retrying one command does not create a second revision, receipt, or outbox event;
+- an acknowledged command survives a store/actor restart;
+- reusing a command ID with a different request is rejected;
+- handler failure rolls back revision, receipt, and outbox writes together.
 
 ## Scope rule
 
