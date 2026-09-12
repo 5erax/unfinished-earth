@@ -56,7 +56,7 @@ export function mountPrototypeRenderer(container: HTMLElement): RendererMountRes
     [13, 0.9, 3],
   ] as const) {
     const building = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.8, 2.4), settlementMaterial);
-    building.position.set(...position);
+    building.position.set(position[0], position[1], position[2]);
     scene.add(building);
   }
 
