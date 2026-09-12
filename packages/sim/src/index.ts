@@ -1,3 +1,5 @@
+import { nextXorshift32, normalizeSeed } from "./prng.js";
+
 export const GAME_DAY_REAL_SECONDS = 30 * 60;
 export const GAME_HOUR_REAL_SECONDS = GAME_DAY_REAL_SECONDS / 24;
 export const MAX_OFFLINE_REAL_SECONDS = 72 * 60 * 60;
@@ -52,23 +54,6 @@ function assertNonNegativeInteger(value: number, label: string) {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${label} must be a non-negative safe integer`);
   }
-}
-
-function normalizeSeed(seed: number) {
-  if (!Number.isSafeInteger(seed)) {
-    throw new RangeError("seed must be a safe integer");
-  }
-
-  const normalized = seed >>> 0;
-  return normalized === 0 ? 0x6d2b79f5 : normalized;
-}
-
-function nextXorshift32(state: number) {
-  let value = state >>> 0;
-  value ^= value << 13;
-  value ^= value >>> 17;
-  value ^= value << 5;
-  return value >>> 0;
 }
 
 function validateScheduledInputs(inputs: readonly ScheduledSimInput[]) {
@@ -238,5 +223,7 @@ export function catchUpOfflineTo(
   return advanceSimulationTicks(state, tickCount);
 }
 
+export * from "./prng.js";
 export * from "./water-food.js";
 export * from "./settlement-food.js";
+export * from "./weather.js";
