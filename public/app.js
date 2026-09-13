@@ -1,3 +1,14 @@
+import { CommandJournal } from "/command-journal.js";
+const journal = new CommandJournal({
+  get length() {
+    return localStorage.length;
+  },
+  key: (i) => localStorage.key(i),
+  getItem: (k) => localStorage.getItem(k),
+  setItem: (k, v) => localStorage.setItem(k, v),
+  removeItem: (k) => localStorage.removeItem(k),
+});
+let recovering = false;
 import { Motion } from "/motion.js";
 const motion = new Motion();
 let sendingMove = false,
@@ -92,50 +103,116 @@ function accept(next) {
     online = true;
     renderUI();
     renderWorld();
+    renderSync();
   }
 }
-async function command(cmd) {
-  if (busy || !state || (cmd.type !== "move" && motion.pending.length))
-    return false;
-  busy = true;
-  const body = JSON.stringify({
-    ...cmd,
-    id: Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
-      b.toString(16).padStart(2, "0"),
-    ).join(""),
-  });
+function pendingCommands() {
+  if (!state) return [];
+  return journal.entries(state.you);
+}
+function renderSync() {
   try {
-    let result;
-    try {
-      result = await api("/api/command", { method: "POST", body });
-    } catch {
-      result = await api("/api/command", { method: "POST", body });
-    }
-    if (result.data.state) accept(result.data.state);
-    if (!result.ok) {
-      toast(result.data.error);
-      return false;
-    }
-    toast(result.data.message);
+    const count = pendingCommands().length;
+    $("sync-panel").hidden = !count || (busy && !recovering);
+    $("sync-message").textContent = recovering
+      ? "Đang xác nhận thao tác trước đó…"
+      : `Còn ${count} thao tác đang chờ xác nhận. Game sẽ tự nối lại khi có mạng.`;
+    $("sync-retry").disabled = busy || recovering;
+    if (count) $("save").textContent = "Đang chờ xác nhận";
+  } catch {
+    $("sync-panel").hidden = false;
+    $("sync-message").textContent =
+      "Không đọc được bản ghi đồng bộ trên trình duyệt. Hãy cho phép lưu dữ liệu trang rồi thử lại.";
+  }
+}
+function hasPending() {
+  try {
+    return pendingCommands().length > 0;
+  } catch {
     return true;
+  }
+}
+const sendEntry = (entry) =>
+  journal.send(entry, (body) => api("/api/command", { method: "POST", body }));
+async function recoverCommands() {
+  if (busy || recovering || !state) return;
+  recovering = true;
+  path = [];
+  held.clear();
+  renderSync();
+  try {
+    for (const entry of pendingCommands()) {
+      if (entry.player !== state.you) break;
+      const result = await sendEntry(entry);
+      if (result.data.state) accept(result.data.state);
+      if (!result.settled) break;
+      toast(
+        result.ok
+          ? "Đã xác nhận thao tác và khôi phục tiến độ."
+          : result.data.error,
+      );
+    }
   } catch {
     online = false;
-    $("connection").textContent = "Mất kết nối";
+  } finally {
+    recovering = false;
+    renderSync();
+  }
+}
+$("sync-retry").onclick = () => poll();
+async function command(cmd) {
+  if (
+    busy ||
+    recovering ||
+    !state ||
+    (cmd.type !== "move" && motion.pending.length)
+  )
+    return false;
+  if (hasPending()) {
+    toast("Đang xác nhận thao tác trước đó. Vui lòng chờ đồng bộ.");
+    return false;
+  }
+  busy = true;
+  try {
+    const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+      b.toString(16).padStart(2, "0"),
+    ).join("");
+    // Write before sending: reload or lost ACK must reuse the same receipt ID.
+    const entry = journal.prepare(state.you, cmd, id);
+    renderSync();
+    let result;
+    try {
+      result = await sendEntry(entry);
+    } catch {
+      result = await sendEntry(entry);
+    }
+    if (result.data.state) accept(result.data.state);
+    if (!result.settled) {
+      toast("Chưa xác nhận được thao tác. Game sẽ tự thử lại.");
+      return false;
+    }
+    toast(result.ok ? result.data.message : result.data.error);
+    return result.ok;
+  } catch {
+    online = false;
+    $("connection").textContent = "Chờ kết nối";
     toast(
-      "Chưa nhận xác nhận. Đang kết nối lại; đừng lặp thao tác cho đến khi trạng thái được cập nhật.",
+      "Chưa hoàn tất đồng bộ. Kiểm tra kết nối và quyền lưu dữ liệu trang; thao tác chưa xác nhận sẽ được khôi phục khi kết nối lại.",
     );
     return false;
   } finally {
     busy = false;
+    renderSync();
   }
 }
 async function poll() {
-  if (polling || busy) return;
+  if (polling || busy || recovering) return;
   polling = true;
   try {
     const r = await api("/api/state");
     if (r.ok) {
       accept(r.data);
+      if (hasPending()) await recoverCommands();
       if ($("welcome").open) $("welcome").close();
     } else if (r.status === 401) {
       online = false;
@@ -221,7 +298,7 @@ function canWalk(x, z) {
 }
 
 function travel(destination) {
-  if (!state || !online) return;
+  if (!state || !online || recovering || (!busy && hasPending())) return;
   path = [];
   const p = motion.target(state.you, state.players[state.you], state.you),
     queue = [[p.x, p.z]],
@@ -285,7 +362,7 @@ async function sendMoves() {
   sendingMove = false;
 }
 function move(dx, dz) {
-  if (!state || !online) return;
+  if (!state || !online || recovering || (!busy && hasPending())) return;
   path = [];
   const p = motion.target(state.you, state.players[state.you], state.you);
   if (motion.enqueue(state, p.x + dx, p.z + dz, mapWalkable)) sendMoves();
@@ -342,7 +419,13 @@ for (const b of document.querySelectorAll("[data-move]")) {
       () => held.delete("pointer");
 }
 pathTimer = setInterval(() => {
-  if (!state || !online || inputBlocked()) {
+  if (
+    !state ||
+    !online ||
+    recovering ||
+    (!busy && hasPending()) ||
+    inputBlocked()
+  ) {
     held.clear();
     return;
   }

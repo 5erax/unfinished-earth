@@ -1,5 +1,13 @@
 # Lịch sử thay đổi
 
+## 2026-09-13 — Sao lưu và restore drill SQLite
+
+Thêm CLI backup/verify/restore, sao chép nhất quán cả WAL, giữ session và receipt, kiểm tra phiên bản và integrity, từ chối ghi đè. Restore drill trên dữ liệu tạm xác minh kho/túi và khả năng trả biên nhận cũ. 31 kiểm thử game; chưa sao lưu D1 cloud hoặc PostgreSQL.
+
+## 2026-09-13 — Khôi phục lệnh và kiểm thử crash
+
+Lưu thao tác chưa xác nhận trong trình duyệt, tự khôi phục bằng mã cũ khi nối mạng/tải lại và hiển thị trạng thái đồng bộ. Tách bản ghi theo nhân vật và thao tác để nhiều tab không ghi đè. Thêm kiểm thử mất ACK và SIGKILL sau commit; 28 kiểm thử game đạt.
+
 ## 2026-09-13 — Nhà và kho có thể xây
 
 Thêm nhà nhỏ (6 gỗ/2 đá, thêm hai chỗ ở) và kho cá nhân (4 gỗ/2 đá, chứa 80 đơn vị). Có chọn ô trên bản đồ, báo lỗi vị trí và cất/lấy tài nguyên. Máy chủ kiểm tra vật liệu, quyền sở hữu và đường đi; bảo toàn save cũ. 21 kiểm thử mô phỏng/API đạt, gồm tranh ô xây và gửi lại lệnh.

@@ -679,3 +679,14 @@ input {
     overflow: visible;
   }
 }
+
+#sync-panel {
+  border-top: 1px solid #96784b;
+  margin-top: 12px;
+  padding-top: 10px;
+  color: #f2d39b;
+}
+#sync-panel p {
+  font-size: 14px;
+  line-height: 1.5;
+}

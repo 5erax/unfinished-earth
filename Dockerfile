@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && mkdir /data && chown node:node /data
 COPY public ./public
 COPY src ./src
+COPY scripts/world-backup.mjs ./scripts/world-backup.mjs
 USER node
 VOLUME ["/data"]
 EXPOSE 3000
