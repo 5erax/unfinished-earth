@@ -69,13 +69,13 @@ Command receipts, Chronicle và player records hiện chưa được cắt gọn
 Tạo `.env` từ `.env.example`, đặt mã thế giới riêng ít nhất 16 ký tự, rồi:
 
 ```sh
-docker compose up -d --build
-docker compose logs --tail=50 earth
+docker compose -f compose.playable.yaml up -d --build
+docker compose -f compose.playable.yaml logs --tail=50 earth
 ```
 
 Compose chỉ mở `127.0.0.1:3000` trên host. Đặt HTTPS reverse proxy phía trước cổng này để chơi từ xa; chuyển tiếp Host gốc và `X-Forwarded-Proto: https`. Chia sẻ mã thế giới với nhóm thử nghiệm qua kênh riêng. Cookie là HttpOnly/SameSite=Strict, Secure khi qua HTTPS. Thay access code chưa thu hồi session đang tồn tại: cơ chế quản lý/thu hồi thành viên chưa được làm.
 
-Dùng volume `earth-data`; không dùng filesystem tạm của serverless cho SQLite. Không chạy `docker compose down -v` nếu muốn giữ save. Bản này chưa phù hợp GitHub Pages hoặc chức năng serverless không có ổ bền vững. Chưa build/chạy image Docker trong phiên phát triển này; cần smoke test trên host đích trước đưa cho người chơi.
+Dùng volume `earth-data`; không dùng filesystem tạm của serverless cho SQLite. Không chạy `docker compose -f compose.playable.yaml down -v` nếu muốn giữ save. Bản này chưa phù hợp GitHub Pages hoặc chức năng serverless không có ổ bền vững. Chưa build/chạy image Docker trong phiên phát triển này; cần smoke test trên host đích trước đưa cho người chơi.
 
 Sao lưu an toàn: dừng container để đóng DB, sao chép **toàn bộ volume** sang nơi lưu khác, rồi khởi động lại. Khôi phục vào volume mới, giữ cùng schemaVersion/simVersion, mở trên bản sao và xác minh nhân vật, túi, cầu, kho, NPC, Chronicle. Chưa có script migration; bản không khớp version sẽ từ chối mở save.
 

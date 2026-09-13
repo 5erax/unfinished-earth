@@ -2,7 +2,7 @@
 
 **Sandbox co-op trên web, nơi sinh thái, cộng đồng và lịch sử cùng thay đổi theo hành động của người chơi.**
 
-[English](README.en.md) · [Tài liệu thiết kế](docs/README.md) · [Cách đóng góp](CONTRIBUTING.md)
+[English](README.en.md) · [Tài liệu thiết kế](docs/README.md) · [Cách phát triển](DEVELOPMENT.md) · [Cách đóng góp](CONTRIBUTING.md)
 
 ## Dự án là gì
 
@@ -29,11 +29,11 @@ Mở `http://127.0.0.1:3000`. Dùng danh sách địa điểm để đi đến n
 
 Đồng hồ prototype mặc định **×30** (một ngày game = một phút thực). Đặt `SIM_SPEED=1` để dùng nhịp 30 phút/ngày của thiết kế. Dữ liệu nằm trong `data/world.sqlite`; giữ thư mục này qua lần chạy lại.
 
-Có [Docker Compose](compose.yaml) cho một máy chủ với ổ dữ liệu bền vững. Có thêm adapter Cloudflare Workers/D1 cho bản staging trên Sites; xem phần staging trong hướng dẫn.
+Có architecture spike TypeScript/PostgreSQL tại `apps/` và `packages/`; xem [DEVELOPMENT.md](DEVELOPMENT.md). Chạy kiểm thử/build spike bằng `pnpm test:workspace` / `pnpm build:workspace`.
 
-Game Design Bible v0.1 gồm 117 mục, 20 tình huống phát sinh, bản đồ tương tác hệ thống, phạm vi MVP và kế hoạch kiểm chứng. Các con số về quy mô, hiệu năng và tiến độ là mục tiêu hoặc giả định cần thử nghiệm, chưa phải kết quả đo.
+Có [Docker Compose](compose.playable.yaml) cho một máy chủ với ổ dữ liệu bền vững. Có thêm adapter Cloudflare Workers/D1 cho bản staging trên Sites; xem phần staging trong hướng dẫn.
 
-Repository và README được công bố ở commit khởi tạo trước khi viết tài liệu chi tiết.
+Game Design Bible v0.1 gồm 117 mục, 20 tình huống phát sinh, bản đồ tương tác hệ thống, phạm vi MVP và kế hoạch kiểm chứng. Các con số về quy mô, hiệu năng và tiến độ vẫn là mục tiêu hoặc giả định cần thử nghiệm cho tới khi có evidence từ prototype.
 
 ## Hướng thiết kế
 
@@ -43,22 +43,22 @@ Repository và README được công bố ở commit khởi tạo trước khi v
 - Người vắng mặt được bảo vệ khỏi mất căn cứ chỉ vì không đăng nhập; sản xuất offline có giới hạn.
 - Prototype nhỏ chứng minh một chuỗi tương tác hoàn chỉnh trước khi mở rộng nội dung.
 
-Persistence không đồng nghĩa với mô phỏng mọi cá thể toàn thời gian. Thiết kế sẽ dùng máy chủ quyết định trạng thái, mô phỏng vùng, lưu dữ liệu và cập nhật bù có giới hạn. Không cam kết thế giới vô hạn, nội dung vô tận hoặc dịch vụ vận hành vĩnh viễn.
+Persistence không đồng nghĩa với mô phỏng mọi cá thể toàn thời gian. Thiết kế dùng máy chủ quyết định trạng thái, mô phỏng vùng, lưu dữ liệu và cập nhật bù có giới hạn. Không cam kết thế giới vô hạn, nội dung vô tận hoặc dịch vụ vận hành vĩnh viễn.
 
 ## Cấu trúc
 
 | Đường dẫn | Nội dung |
 | --- | --- |
-| `README.md` | Giới thiệu dự án bằng tiếng Việt |
-| `README.en.md` | English project overview |
-| `docs/README.md` | Điểm bắt đầu và chỉ mục bộ tài liệu |
-| `docs/01-vision-and-player.md` | Tầm nhìn, nhân vật, xây dựng và hậu cần |
-| `docs/02-world-and-ecology.md` | Thế giới, nước, hệ sinh thái và tài nguyên |
-| `docs/03-society-and-knowledge.md` | NPC, cộng đồng, kinh tế và tri thức |
-| `docs/04-persistence-and-production.md` | Co-op, offline, kiến trúc và kế hoạch sản xuất |
-| `docs/05-scenarios-and-validation.md` | Kịch bản, quyết định và tiêu chí kiểm chứng |
+| `apps/client/` | Web client: accessible HTML UI + Three.js rendering spike |
+| `apps/world-server/` | Authoritative world-server/gateway spike |
+| `packages/protocol/` | Shared runtime-validated wire contracts |
+| `packages/sim/` | Deterministic simulation rules independent of rendering/server |
+| `packages/db/` | PostgreSQL schema and migration tooling |
+| `docs/architecture/` | Architecture Decision Records (ADR) |
+| `docs/` | Game Design Bible — nguồn thiết kế chuẩn |
 | `exports/` | Bản tài liệu tổng hợp để đọc và chia sẻ |
-| `CONTRIBUTING.md` | Quy tắc đề xuất và sửa thiết kế |
+| `DEVELOPMENT.md` | Thiết lập môi trường và lệnh chạy prototype |
+| `CONTRIBUTING.md` | Quy tắc thay đổi thiết kế/mã nguồn |
 | `CHANGELOG.md` | Lịch sử các mốc tài liệu |
 
 ## Bước tiếp theo
