@@ -123,3 +123,9 @@ Giao diện tự dùng bản đồ Canvas 2D khi WebGL không có. Các nút hà
 Mở **Xây dựng**, chọn loại và ô trên bản đồ hoặc nhập tọa độ. Đi tới ô chọn rồi xây khi đủ vật liệu. Nhà nhỏ cần 6 gỗ/2 đá, nằm gần làng; kho cần 4 gỗ/2 đá, chứa 80 đơn vị. Chỉ chủ kho được cất/lấy; túi vẫn giới hạn 40. Không được xây trên sông, đường chính, tài nguyên, nhân vật hoặc bịt lối đi. Tối đa 64 công trình, chưa có tháo dỡ.
 
 Save cũ giữ nguyên. Khi xây căn nhà đầu tiên, sức chứa nền mỗi làng lấy tối thiểu 12 hoặc dân số hiện tại nếu cao hơn, rồi cộng hai chỗ cho mỗi nhà mới. Di cư từ đó chịu giới hạn chỗ ở.
+
+### Khôi phục thao tác sau mất kết nối
+
+Client lưu thao tác vào trình duyệt trước khi gửi. Khi mất phản hồi hoặc tải lại trang, game tự gửi lại cùng mã thao tác sau khi nhận diện đúng nhân vật. Máy chủ dùng biên nhận đã lưu để trả lại kết quả mà không xây/trừ vật liệu lần nữa. Lỗi máy chủ và hết phiên không xóa thao tác đang chờ; nhân vật khác không tự nhận thao tác đó. Khi chưa xác nhận được kết quả, thao tác mới tạm dừng và bảng đồng bộ có nút kết nối lại.
+
+28 kiểm thử đạt, gồm mất ACK khi xây kho rồi mở lại client, hai tab không ghi đè biên nhận, lỗi 5xx/hết phiên, và SIGKILL tiến trình Node ngay sau commit rồi mở lại SQLite. Crash drill dùng cơ sở dữ liệu tạm, không tác động save thật. Chưa nghiệm thu crash hạ tầng D1 thật, migration/rollback hoặc compaction dài hạn. Xóa dữ liệu trình duyệt vẫn làm mất bản ghi client và cookie; đây chưa phải cơ chế khôi phục tài khoản.
