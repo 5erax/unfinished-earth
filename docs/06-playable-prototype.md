@@ -147,3 +147,13 @@ Công cụ dùng SQLite VACUUM INTO để lấy snapshot nhất quán, gồm c�
 `restore` luôn tạo tệp mới, từ chối ghi đè tệp có sẵn hoặc khôi phục vào nguồn. Sau khi kiểm tra bản sao, dừng máy chủ cũ rồi chạy `DATA_DIR=data/restored npm start` để dùng bản khôi phục. Giữ cả dữ liệu cũ cho tới khi đã xác minh nhân vật, kho và lịch sử trên bản khôi phục. Chạy máy chủ cũ và bản khôi phục cùng lúc sẽ tạo hai thế giới độc lập; không có cơ chế hợp nhất tự động.
 
 Hỗ trợ Node/SQLite và SQLite của adapter D1 cục bộ. Không kết nối database D1 cloud, PostgreSQL hoặc sao lưu dữ liệu cloud thật. Công cụ không thay thế migration/rollback và chưa có lịch sao lưu tự động. Ba kiểm thử restore mới bao phủ WAL đang mở, session/receipt, snapshot D1 cục bộ, từ chối ghi đè và save không hợp lệ. Tổng cộng 31 kiểm thử game.
+
+### Quality update — trải nghiệm chơi
+
+Góc nhìn mặc định là bản đồ đẳng cự minh họa, với sprite cây/đá/nhà/kho mới, camera theo nhân vật và nút toàn cảnh. Có thể chuyển sang 3D nếu thiết bị hỗ trợ WebGL. Giao diện ưu tiên thế giới: nhiệm vụ gọn bên trái, bảng thao tác chỉ mở khi chọn, lịch sử mặc định thu gọn. Mục tiêu chuyển theo vật liệu/cầu/lương thực/cống, dẫn tới nguồn tài nguyên gần nhất và báo khi kho hết hàng. Chọn thao tác ở xa sẽ tự đi tới rồi thực hiện; E thao tác tại điểm đang chọn.
+
+Client gửi đoạn đường tối đa tám bước, máy chủ xác thực toàn bộ đường rồi xác nhận phần đủ ngân sách thời gian (160 ms/bước, tích lũy tối đa 1.28 giây). Client vẫn phản hồi bằng dự đoán và đối chiếu số bước đã xác nhận; biên nhận retry giữ nguyên. Bỏ thời gian chờ 165 ms sau mỗi ACK. Kiểm thử chu kỳ truyền 650 ms xác nhận bốn bước mỗi gói; đây là mô phỏng độ trễ, không phải đo latency từ máy người dùng.
+
+Sprite `public/world-sprites.png` được tạo cho dự án bằng công cụ sinh ảnh, dùng trực tiếp cho các vật thể trong bản đồ 2D. Chưa có animation nhân vật hoàn chỉnh hoặc art 3D tương đương.
+
+Kiểm tra giao diện desktop trên thế giới mới: vào game, thu thập 8 gỗ/4 đá, sửa cầu, lấy khẩu phần, tải lại giữ tiến độ; thêm kiểm tra chọn cây từ bản đồ và tự đi tới rồi thu thập. Phát hiện và sửa hướng dẫn tự bỏ chuyến giao khi xe NPC giao trước. 33 kiểm thử tự động đạt, có chuỗi HTTP qua sông/giao thức ăn/mở cống/thu hoạch. Chưa nghiệm thu WebGL, mobile hoặc độ trễ mạng trên máy người dùng; không coi số test là chứng nhận chất lượng hình ảnh.

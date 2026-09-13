@@ -14,10 +14,14 @@ const port = Number(flag("--port", "3000")),
 mkdirSync(resolve(root, ".sites-runtime"), { recursive: true });
 const db = new LocalD1(resolve(root, ".sites-runtime/preview.sqlite"));
 const files = {
+  "/world-sprites.png": ["public/world-sprites.png", "image/png"],
   "/world-rules.js": ["src/world.js", "text/javascript; charset=utf-8"],
   "/map2d.js": ["public/map2d.js", "text/javascript; charset=utf-8"],
   "/motion.js": ["public/motion.js", "text/javascript; charset=utf-8"],
-  "/command-journal.js": ["public/command-journal.js", "text/javascript; charset=utf-8"],
+  "/command-journal.js": [
+    "public/command-journal.js",
+    "text/javascript; charset=utf-8",
+  ],
   "/": ["public/index.html", "text/html; charset=utf-8"],
   "/app.js": ["public/app.js", "text/javascript; charset=utf-8"],
   "/style.css": ["public/style.css", "text/css; charset=utf-8"],
@@ -51,7 +55,14 @@ const server = http.createServer(async (req, res) => {
     const assets = Object.fromEntries(
       Object.entries(files).map(([url, [file, type]]) => [
         url,
-        [readFileSync(resolve(root, file), "utf8"), type],
+        [
+          readFileSync(
+            resolve(root, file),
+            type.startsWith("image/") ? "base64" : "utf8",
+          ),
+          type,
+          type.startsWith("image/"),
+        ],
       ]),
     );
     const worker = createWorker(assets);

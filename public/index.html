@@ -26,24 +26,28 @@
         </div>
       </header>
       <section class="mission panel">
-        <span class="eyebrow">CHƯƠNG 01 / NỐI LẠI HAI BỜ</span>
-        <h1>Một cây cầu.<br />Nhiều cuộc đời.</h1>
-        <p>
-          Cầu gãy khiến lương thực không đến được Làng Hạ. Hãy mở lại tuyến
-          đường và xem thung lũng đổi thay.
-        </p>
-        <ol id="objectives">
+        <span class="eyebrow" id="chapter-label">HÀNH TRÌNH / 01</span>
+        <h1 id="quest-title">Nối lại hai bờ</h1>
+        <p>Hãy dựng lại cây cầu để xe lương thực đến được Làng Hạ.</p>
+        <p id="quest-hint"></p>
+        <button id="quest-go" class="primary">Dẫn đường</button>
+        <div id="quest-progress"></div>
+        <ol id="objectives" hidden>
           <li>Thu thập 8 gỗ và 4 đá</li>
           <li>Sửa cầu qua sông</li>
           <li>Đưa thức ăn đến Làng Hạ</li>
         </ol>
-        <div class="villages" id="villages"></div>
+        <details class="village-details">
+          <summary>Hai ngôi làng</summary>
+          <div class="villages" id="villages"></div>
+        </details>
         <div id="sync-panel" hidden role="status" aria-live="polite">
           <p id="sync-message"></p>
           <button id="sync-retry">Kết nối lại</button>
         </div>
       </section>
       <aside class="inspect panel">
+        <button id="close-inspect" aria-label="Đóng bảng địa điểm">×</button>
         <div class="panel-heading">
           <span class="eyebrow">ĐỊA ĐIỂM</span><span id="coordinates">—</span>
         </div>
@@ -132,11 +136,11 @@
         </div>
       </aside>
       <section class="chronicle panel">
-        <button id="chronicle-toggle" aria-expanded="true">
+        <button id="chronicle-toggle" aria-expanded="false">
           <span class="eyebrow">BIÊN NIÊN SỬ</span
           ><span id="event-count">0 sự kiện</span>
         </button>
-        <div id="events" aria-label="Lịch sử thế giới"></div>
+        <div id="events" hidden aria-label="Lịch sử thế giới"></div>
       </section>
       <footer class="toolbar panel">
         <div class="bag">
@@ -148,12 +152,16 @@
           </div>
         </div>
         <div class="controls">
+          <button id="build-toggle">Xây dựng</button
+          ><button id="map-overview">Toàn cảnh</button
+          ><button id="view-toggle">2D / 3D</button>
           <button id="rotate-left" title="Xoay trái 90°">↶</button
-          ><span>WASD · di chuyển<br />Chọn bản đồ · tương tác</span
+          ><span>WASD để đi · E tương tác</span
           ><button id="rotate-right" title="Xoay phải 90°">↷</button>
         </div>
         <div class="save">
           <span id="save">Chưa vào thế giới</span
+          ><small id="latency">Đang kết nối</small
           ><small id="credit">Tín dụng offline: 0 phút</small>
         </div>
       </footer>
@@ -167,7 +175,7 @@
     </main>
     <dialog id="welcome">
       <form id="join-form">
-        <span class="eyebrow">THE UNFINISHED EARTH / PROTOTYPE 0.1</span>
+        <span class="eyebrow">THE UNFINISHED EARTH / THUNG LŨNG ĐẦU TIÊN</span>
         <h2>Thế giới còn dang dở.<br />Bắt đầu từ hai bờ sông.</h2>
         <p>
           Bạn đến một thung lũng sau trận mưa lớn. Hai làng vẫn sinh sống, nhưng
@@ -188,8 +196,8 @@
         <button class="primary" type="submit">
           Bước vào thung lũng <span>→</span></button
         ><small
-          >Prototype kỹ thuật • Đồng hồ thử nghiệm ×30 mặc định<br />Chưa phải
-          MVP đầy đủ • Ưu tiên trình duyệt desktop</small
+          >WASD để di chuyển · Chọn vật thể để tương tác<br />Tiến độ của bạn
+          được lưu tự động.</small
         >
       </form>
     </dialog>
@@ -216,6 +224,7 @@
       </p>
       <button class="primary" id="close-help">Trở lại thung lũng</button>
     </dialog>
+    <div id="world-hint">Chọn cây hoặc mỏ đá để bắt đầu khám phá</div>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

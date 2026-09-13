@@ -165,7 +165,7 @@ async function command(cmd) {
     busy ||
     recovering ||
     !state ||
-    (cmd.type !== "move" && motion.pending.length)
+    (!["move", "walk"].includes(cmd.type) && motion.pending.length)
   )
     return false;
   if (hasPending()) {
@@ -270,6 +270,7 @@ function select(id) {
     }
   }
   selected = id;
+  document.querySelector(".inspect").classList.add("open");
   const select = $("places");
   if (![...select.options].some((o) => o.value === id)) {
     const o = document.createElement("option");
@@ -297,7 +298,7 @@ function canWalk(x, z) {
   return mapWalkable(state, x, z);
 }
 
-function travel(destination) {
+function travel(destination, radius = 2) {
   if (!state || !online || recovering || (!busy && hasPending())) return;
   path = [];
   const p = motion.target(state.you, state.players[state.you], state.you),
@@ -306,7 +307,7 @@ function travel(destination) {
   let found;
   for (let i = 0; i < queue.length; i++) {
     const [x, z] = queue[i];
-    if (Math.hypot(x - destination.x, z - destination.z) <= 2) {
+    if (Math.hypot(x - destination.x, z - destination.z) <= radius) {
       found = [x, z];
       break;
     }
@@ -350,18 +351,27 @@ async function sendMoves() {
   )
     return;
   sendingMove = true;
-  const next = motion.pending[0];
-  const ok = await command({ type: "move", ...next });
-  motion.acknowledge(ok);
+  const steps = motion.pending.slice(0, 8);
+  const before = state.players[state.you].moveSeq || 0,
+    sent = performance.now();
+  const ok = await command({ type: "walk", steps });
+  const accepted = Math.max(
+    0,
+    Math.min(steps.length, (state.players[state.you].moveSeq || 0) - before),
+  );
+  motion.acknowledge(ok, accepted);
+  $("latency").textContent =
+    `Đồng bộ ${Math.round(performance.now() - sent)} ms`;
   if (!ok) {
     path = [];
     held.clear();
   }
   // Space requests after acknowledgement so server-side rate validation remains valid.
-  nextMoveAt = performance.now() + 165;
+  nextMoveAt = sent + 180;
   sendingMove = false;
 }
 function move(dx, dz) {
+  queuedAction = null;
   if (!state || !online || recovering || (!busy && hasPending())) return;
   path = [];
   const p = motion.target(state.you, state.players[state.you], state.you);
@@ -386,6 +396,7 @@ function inputBlocked() {
   );
 }
 let lastStep = 0;
+let queuedAction = null;
 window.addEventListener("keydown", (e) => {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (!directions[key] || inputBlocked()) return;
@@ -434,7 +445,7 @@ pathTimer = setInterval(() => {
     if (held.size) {
       move(...[...held.values()].at(-1));
       lastStep = now;
-    } else if (path.length && motion.pending.length < 4) {
+    } else if (path.length && motion.pending.length < 8) {
       const [x, z] = path[0];
       if (motion.enqueue(state, x, z, mapWalkable)) path.shift();
       else path = [];
@@ -442,6 +453,19 @@ pathTimer = setInterval(() => {
     }
   }
   sendMoves();
+  if (
+    queuedAction &&
+    !path.length &&
+    !motion.pending.length &&
+    !busy &&
+    !recovering
+  ) {
+    const a = queuedAction;
+    queuedAction = null;
+    const p = state.players[state.you];
+    if (Math.hypot(p.x - a.destination.x, p.z - a.destination.z) <= 2.5)
+      command(a.cmd);
+  }
 }, 16);
 function plot() {
   return { x: Number($("build-x").value), z: Number($("build-z").value) };
@@ -454,7 +478,7 @@ function choosePlot(t) {
 }
 function mapTravel(t) {
   if ($("construction").open) choosePlot(t);
-  else travel(t);
+  else travel(t, 0);
 }
 function plotPreview() {
   if (!state || !$("construction").open) return null;
@@ -518,6 +542,108 @@ for (const [id, direction] of [
       amount: Number($("storage-amount").value),
       direction,
     });
+let questTarget = "home-wood";
+function updateQuest() {
+  const p = state.players[state.you];
+  let title, hint;
+  if (!state.bridge) {
+    if (p.bag.wood < 8) {
+      title = "Gom gỗ cho cây cầu";
+      hint = `Còn ${8 - p.bag.wood} gỗ. Đến rừng, chọn cây rồi thu thập.`;
+      questTarget = state.resources
+        .filter((r) => r.type === "wood" && r.remaining > 0 && r.x < 15)
+        .sort(
+          (a, b) =>
+            Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z),
+        )[0]?.id;
+    } else if (p.bag.stone < 4) {
+      title = "Tìm đá gia cố";
+      hint = `Còn ${4 - p.bag.stone} đá để dựng lại trụ cầu.`;
+      questTarget = state.resources
+        .filter((r) => r.type === "stone" && r.remaining > 0 && r.x < 15)
+        .sort(
+          (a, b) =>
+            Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z),
+        )[0]?.id;
+    } else {
+      title = "Dựng lại cây cầu";
+      hint = "Đủ 8 gỗ và 4 đá. Đến bờ tây, sửa cầu để nối hai làng.";
+      questTarget = "bridge";
+    }
+  } else if (
+    p.bag.food > 0 || (!state.deliveries &&
+    !state.events.some((e) => e.kind === "food" && e.place === "east"))
+  ) {
+    title = p.bag.food ? "Mang thức ăn qua sông" : "Lấy lương thực";
+    hint = p.bag.food
+      ? "Đến Làng Hạ và giao khẩu phần. Cây cầu đã mở một đường sống mới."
+      : "Đến kho chung lấy thức ăn rồi giao cho Làng Hạ.";
+    questTarget = p.bag.food ? "east" : state.depot > 0 ? "depot" : "farm";
+    if (!p.bag.food && state.depot === 0) {
+      title = "Bổ sung lương thực";
+      hint =
+        "Kho chung đã hết hàng. Đến ruộng thu hoạch để tiếp tục chuyến giao thức ăn.";
+    }
+  } else if (!state.gateCause) {
+    title = "Đưa nước về ruộng";
+    hint =
+      "Gom thêm 4 gỗ, 2 đá để mở cống. Ruộng lớn nhanh hơn, nhưng cá hạ lưu sẽ giảm.";
+    questTarget = "gate";
+    const needed=p.bag.wood<4?"wood":p.bag.stone<2?"stone":null;
+    if(needed){questTarget=state.resources.filter(r=>r.type===needed&&r.remaining>0).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]?.id;hint=`Cần thêm ${needed==="wood"?4-p.bag.wood:2-p.bag.stone} ${needed==="wood"?"gỗ":"đá"} để mở cống. Dẫn đường sẽ đưa bạn tới nguồn còn hàng.`;}
+  } else {
+    title = "Dựng một nơi để ở lại";
+    hint =
+      "Xây nhà gần làng để thêm chỗ ở, hoặc dựng kho để cất vật liệu. Xem lịch sử để hiểu thung lũng đổi thay.";
+    questTarget = null;
+  }
+  $("quest-title").textContent = title;
+  $("quest-hint").textContent = hint;
+  $("quest-go").textContent = questTarget
+    ? "Dẫn đường đến mục tiêu →"
+    : "Mở xây dựng →";
+  const done =
+    (state.bridge ? 2 : p.bag.wood >= 8 && p.bag.stone >= 4 ? 1 : 0) +
+    (state.deliveries > 0 ? 1 : 0) +
+    (state.gateCause ? 1 : 0);
+  $("quest-progress").textContent = `${done} / 4 cột mốc đã đạt`;
+}
+$("quest-go").onclick = () => {
+  if (questTarget) {
+    select(questTarget);
+    const t = target();
+    travel(questTarget === "bridge" ? { x: 14, z: 17 } : t);
+  } else $("build-toggle").click();
+};
+$("close-inspect").onclick = () =>
+  document.querySelector(".inspect").classList.remove("open");
+$("build-toggle").onclick = () => {
+  document.querySelector(".inspect").classList.add("open");
+  $("construction").open = true;
+};
+$("view-toggle").onclick = () => {
+  localStorage.setItem("earth-view", fallback ? "3d" : "2d");
+  location.reload();
+};
+$("map-overview").onclick = () => {
+  if (fallback) {
+    fallback.overview = !fallback.overview;
+    renderWorld();
+  } else {
+    camera.zoom = camera.zoom === 1 ? 0.65 : 1;
+    camera.updateProjectionMatrix();
+  }
+};
+window.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "e" && !inputBlocked()) {
+    $("actions").querySelector("button:not(:disabled)")?.click();
+  }
+  if (e.key === "Escape") {
+    document.querySelector(".inspect").classList.remove("open");
+    path = [];
+    held.clear();
+  }
+});
 let actionSpecs = [];
 function action(label, cmd, disabled = false) {
   actionSpecs.push({ label, cmd, disabled });
@@ -531,7 +657,21 @@ function commitActions() {
     const b = document.createElement("button");
     b.textContent = label;
     b.disabled = disabled;
-    b.onclick = () => command(cmd);
+    b.onclick = () => {
+      const t = target(),
+        p = state.players[state.you];
+      const destination = selected === "bridge" ? { x: 14, z: 17 } : t;
+      if (
+        destination &&
+        Math.hypot(p.x - destination.x, p.z - destination.z) > 2.5
+      ) {
+        travel(destination);
+        queuedAction = { cmd, destination };
+        toast("Đang đến gần để thực hiện thao tác…");
+        return;
+      }
+      command(cmd);
+    };
     $("actions").append(b);
   }
 }
@@ -546,7 +686,7 @@ function renderUI() {
   $("coordinates").textContent = `${p.x * 16} / ${p.z * 16} m`;
   for (const kind of ["wood", "stone", "food"])
     $(kind).textContent = p.bag[kind];
-  $("save").textContent = `Đã lưu · phiên bản ${state.revision}`;
+  $("save").textContent = "Tiến độ được lưu tự động";
   $("credit").textContent =
     `Tín dụng offline: ${Math.floor(state.creditMs / 60000)} / 480 phút`;
   const complete = [
@@ -558,6 +698,7 @@ function renderUI() {
   [...$("objectives").children].forEach((li, i) =>
     li.classList.toggle("done", complete[i]),
   );
+  updateQuest();
   $("villages").replaceChildren();
   for (const v of state.villages) {
     const population = state.npcs.filter((n) => n.village === v.id).length;
@@ -584,6 +725,12 @@ function renderUI() {
     `Còn ${r?.remaining ?? 0} đơn vị. Mỗi lần thu thập lấy một đơn vị, túi tối đa 40.`,
   ];
   $("selection-title").textContent = title;
+  const focus = selected === "bridge" ? { x: 14, z: 17 } : target();
+  const distance = focus ? Math.hypot(p.x - focus.x, p.z - focus.z) : 0;
+  $("world-hint").textContent =
+    distance > 2.5
+      ? `${title} · ${Math.round(distance * 16)} m · Chọn thao tác để đi tới`
+      : `${title} · E để tương tác`;
   $("selection-description").textContent = description;
   actionSpecs = [];
   if (r)
@@ -701,6 +848,8 @@ scene.fog = new THREE.Fog("#41635e", 65, 135);
 const camera = new THREE.OrthographicCamera(-24, 24, 24, -24, 0.1, 200);
 let renderer, fallback;
 try {
+  if (localStorage.getItem("earth-view") !== "3d")
+    throw Error("Illustrated view selected");
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
@@ -710,7 +859,7 @@ try {
 } catch {
   fallback = new Map2D(container, select, mapTravel);
 }
-scene.add(new THREE.HemisphereLight(0xdff4df, 0x354c44, 2.5));
+scene.add(new THREE.HemisphereLight(0xf4f2d2, 0x294638, 2.5));
 const sun = new THREE.DirectionalLight(0xffe1a9, 3.4);
 sun.position.set(-18, 40, 25);
 sun.castShadow = true;
@@ -1014,7 +1163,7 @@ function resize() {
     h = container.clientHeight;
   renderer.setSize(w, h);
   const aspect = w / h;
-  const span = w < 760 ? 20 : 23;
+  const span = w < 760 ? 13 : 16;
   camera.left = -span * aspect;
   camera.right = span * aspect;
   camera.top = span;
@@ -1060,12 +1209,15 @@ container.addEventListener("click", (e) => {
 });
 new ResizeObserver(resize).observe(container);
 resize();
-let lastFrame = performance.now();
+let lastFrame = performance.now(), frameWindow=performance.now(), frameCount=0;
 function animate(now = performance.now()) {
   const dt = Math.min((now - lastFrame) / 1000, 0.05);
   lastFrame = now;
+  frameCount++;if(now-frameWindow>=1000){container.dataset.fps=String(Math.round(frameCount*1000/(now-frameWindow)));frameCount=0;frameWindow=now;}
   if (state) {
     const visual = motion.frame(state, dt);
+    if (fallback)
+      fallback.route = [...motion.pending, ...path.map(([x, z]) => ({ x, z }))];
     for (const [id, p] of Object.entries(visual.players))
       playerMeshes.get(id)?.position.set(p.x, 0, p.z);
     if (fallback && visual.moving)
@@ -1077,6 +1229,16 @@ function animate(now = performance.now()) {
       );
   }
   if (renderer) {
+    if (state && camera.zoom === 1) {
+      const p = motion.frame(state, 0).players[state.you];
+      const r = 38;
+      camera.position.set(
+        p.x + Math.sin(angle + Math.PI / 4) * r,
+        34,
+        p.z + Math.cos(angle + Math.PI / 4) * r,
+      );
+      camera.lookAt(p.x, 0, p.z);
+    }
     renderer.render(scene, camera);
   }
   requestAnimationFrame(animate);

@@ -35,13 +35,13 @@ test("prediction is bounded, respects walls and acknowledges only first queued s
     m.enqueue(w, 10, 22, () => true),
     false,
   );
-  for (let x = 8; x <= 11; x++) assert.ok(m.enqueue(w, x, 22, () => true));
+  for (let x = 8; x <= 15; x++) assert.ok(m.enqueue(w, x, 22, () => true));
   assert.equal(
-    m.enqueue(w, 12, 22, () => true),
+    m.enqueue(w, 16, 22, () => true),
     false,
   );
   w.players.a.x = 8;
   m.acknowledge(true);
-  assert.equal(m.pending.length, 3);
-  assert.equal(m.target("a", w.players.a, "a").x, 11);
+  assert.equal(m.pending.length, 7);
+  assert.equal(m.target("a", w.players.a, "a").x, 15);
 });

@@ -1,5 +1,9 @@
 # Lịch sử thay đổi
 
+## 2026-09-13 — Quality update: hình ảnh, vòng chơi và di chuyển
+
+Thêm sprite minh họa cho cây/đá/nhà/kho, góc nhìn theo nhân vật, HUD gọn và mục tiêu dẫn đường theo tiến độ. Một lần bấm thao tác ở xa tự đi đến rồi thực hiện. Thay gửi từng bước bằng đoạn đường có xác nhận số bước và giới hạn tốc độ trên máy chủ; giữ dự đoán và retry an toàn.
+
 ## 2026-09-13 — Sao lưu và restore drill SQLite
 
 Thêm CLI backup/verify/restore, sao chép nhất quán cả WAL, giữ session và receipt, kiểm tra phiên bản và integrity, từ chối ghi đè. Restore drill trên dữ liệu tạm xác minh kho/túi và khả năng trả biên nhận cũ. 31 kiểm thử game; chưa sao lưu D1 cloud hoặc PostgreSQL.

@@ -323,6 +323,33 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     source[cmd.resource] -= cmd.amount;
     dest[cmd.resource] += cmd.amount;
     message = `Đã ${cmd.direction === "deposit" ? "cất" : "lấy"} ${cmd.amount} ${{ wood: "gỗ", stone: "đá", food: "khẩu phần" }[cmd.resource]}.`;
+  } else if (cmd.type === "walk") {
+    requireThat(
+      Array.isArray(cmd.steps) && cmd.steps.length > 0 && cmd.steps.length <= 8,
+      "Đoạn đường không hợp lệ.",
+    );
+    let x = p.x,
+      z = p.z;
+    for (const step of cmd.steps) {
+      requireThat(
+        step &&
+          Number.isInteger(step.x) &&
+          Number.isInteger(step.z) &&
+          walkable(w, step.x, step.z) &&
+          Math.abs(step.x - x) + Math.abs(step.z - z) === 1,
+        "Đường đi đã bị chặn.",
+      );
+      x = step.x;
+      z = step.z;
+    }
+    const budget = Math.min(1280, Math.max(0, now - (p.lastMove || now - 160)));
+    const count = Math.min(cmd.steps.length, Math.floor(budget / 160));
+    if (count) {
+      p.x = cmd.steps[count - 1].x;
+      p.z = cmd.steps[count - 1].z;
+      p.lastMove = now - (budget - count * 160);
+      p.moveSeq = (p.moveSeq || 0) + count;
+    }
   } else if (cmd.type === "move") {
     requireThat(now - p.lastMove >= 160, "Bạn đang di chuyển quá nhanh.");
     requireThat(

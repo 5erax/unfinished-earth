@@ -35,7 +35,11 @@ export function createGameServer({
               x: p.x,
               z: p.z,
               ...(id === player
-                ? { bag: p.bag, discoveries: p.discoveries }
+                ? {
+                    bag: p.bag,
+                    discoveries: p.discoveries,
+                    moveSeq: p.moveSeq || 0,
+                  }
                 : {}),
             },
           ]),
@@ -82,6 +86,7 @@ export function createGameServer({
     ["/world-rules.js", ["src/world.js", "text/javascript"]],
     ["/map2d.js", ["public/map2d.js", "text/javascript"]],
     ["/motion.js", ["public/motion.js", "text/javascript"]],
+    ["/world-sprites.png", ["public/world-sprites.png", "image/png"]],
     ["/command-journal.js", ["public/command-journal.js", "text/javascript"]],
     ["/", ["public/index.html", "text/html"]],
     ["/app.js", ["public/app.js", "text/javascript"]],

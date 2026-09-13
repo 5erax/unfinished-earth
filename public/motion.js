@@ -11,7 +11,7 @@ export class Motion {
   enqueue(world, x, z, walkable) {
     const p = this.target(world.you, world.players[world.you], world.you);
     if (
-      this.pending.length >= 4 ||
+      this.pending.length >= 8 ||
       Math.abs(p.x - x) + Math.abs(p.z - z) !== 1 ||
       !walkable(world, x, z)
     )
@@ -20,8 +20,8 @@ export class Motion {
     this.route.push({ x, z });
     return true;
   }
-  acknowledge(ok) {
-    if (ok) this.pending.shift();
+  acknowledge(ok, count = 1) {
+    if (ok) this.pending.splice(0, count);
     else {
       this.pending = [];
       this.route = [];
