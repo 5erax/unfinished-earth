@@ -152,7 +152,7 @@
           </div>
         </div>
         <div class="controls">
-          <button id="build-toggle">Xây dựng</button
+          <button id="character-open">Nhân vật</button><button id="build-toggle">Xây dựng</button
           ><button id="map-overview">Toàn cảnh</button
           ><button id="view-toggle">2D / 3D</button>
           <button id="rotate-left" title="Xoay trái 90°">↶</button
@@ -173,6 +173,16 @@
       </div>
       <p id="toast" role="status" aria-live="polite"></p>
     </main>
+    <aside id="skill-bar" class="skill-bar panel" hidden aria-label="Kỹ năng nhân vật">
+      <span id="class-name"></span><button id="skill-collect" title="Gom tối đa 6 vật liệu trong 2 ô · hồi 30 giây">Q · Gom vật liệu</button><button id="skill-focus" title="Thu thập nhanh trong 15 giây · hồi 60 giây">R · Tập trung</button>
+    </aside>
+    <dialog id="character-dialog"><form id="character-form">
+      <span class="eyebrow">NHỮNG NGƯỜI DỰNG LẠI THẾ GIỚI</span><h2>Chọn con đường của bạn</h2>
+      <p>Mọi class đều có thể thu thập, xây dựng và giúp hai làng. Đổi class tại nơi trú ẩn.</p>
+      <label>Tên nhân vật<input id="profile-name" minlength="2" maxlength="24" required autocomplete="nickname" /></label>
+      <div id="profile-choices" class="class-choices"></div><p id="profile-error" role="alert"></p>
+      <div class="character-actions"><button type="button" id="character-close">Quay lại</button><button class="primary" type="submit">Lưu nhân vật</button></div>
+    </form></dialog>
     <dialog id="welcome">
       <form id="join-form">
         <span class="eyebrow">THE UNFINISHED EARTH / THUNG LŨNG ĐẦU TIÊN</span>
@@ -192,7 +202,7 @@
             autocomplete="current-password"
             minlength="16"
         /></label>
-        <p id="join-error" role="alert"></p>
+        <label>Tên nhân vật<input id="character-name" minlength="2" maxlength="24" required placeholder="Tên của bạn" autocomplete="nickname" /></label><div id="class-choices" class="class-choices"></div><p id="join-error" role="alert"></p>
         <button class="primary" type="submit">
           Bước vào thung lũng <span>→</span></button
         ><small

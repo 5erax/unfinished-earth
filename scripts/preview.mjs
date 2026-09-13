@@ -14,6 +14,7 @@ const port = Number(flag("--port", "3000")),
 mkdirSync(resolve(root, ".sites-runtime"), { recursive: true });
 const db = new LocalD1(resolve(root, ".sites-runtime/preview.sqlite"));
 const files = {
+  "/characters-v1.png": ["public/characters-v1.png", "image/png"],
   "/world-sprites.png": ["public/world-sprites.png", "image/png"],
   "/world-rules.js": ["src/world.js", "text/javascript; charset=utf-8"],
   "/map2d.js": ["public/map2d.js", "text/javascript; charset=utf-8"],

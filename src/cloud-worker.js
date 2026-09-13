@@ -24,11 +24,14 @@ export function view(w, id, now, speed) {
         {
           id: key,
           name: p.name,
+              classId: p.classId || null,
           x: p.x,
           z: p.z,
           ...(key === id
             ? {
                 bag: p.bag,
+                    cooldowns: p.cooldowns || {},
+                    focusUntil: p.focusUntil || 0,
                 discoveries: p.discoveries,
                 moveSeq: p.moveSeq || 0,
               }
@@ -162,7 +165,7 @@ export function createWorker(assets = {}, clock = Date.now) {
                     ),
                     { status: 409 },
                   );
-                join(w, id, now);
+                join(w, id, now, data.character);
                 return { status: 200, payload: {} };
               },
               {

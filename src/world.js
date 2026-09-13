@@ -234,11 +234,34 @@ function spend(p, wood, stone) {
   p.bag.wood -= wood;
   p.bag.stone -= stone;
 }
-export function join(w, id, now) {
+export const CLASSES = {
+  builder: { name: "Thợ dựng", role: "Dựng nhà · sửa cầu", color: "#bb793e", art: 0,
+    description: "Đôi tay biến đống đổ nát thành nơi trú chân.",
+    passive: "Tay nghề: thu thập tối đa 2 đá mỗi lần, vẫn tiêu hao nguồn đá.",
+    skills: ["Q · Gom vật liệu: lấy tối đa 6 vật liệu từ các nguồn trong 2 ô. Hồi 30 giây.", "R · Tập trung: thu thập cách nhau 0,25 giây trong 15 giây. Hồi 60 giây."] },
+  keeper: { name: "Người giữ nguồn", role: "Nước · đất · mùa màng", color: "#698759", art: 1,
+    description: "Giữ dòng nước sạch và gieo lại những mảnh đất cằn.", passive: "Bộ kỹ năng đang được phát triển. Hiện chơi được các hoạt động chung.", skills: [] },
+  pathfinder: { name: "Người dẫn đường", role: "Khám phá · vận chuyển", color: "#c69b43", art: 2,
+    description: "Tìm con đường nối những mái nhà còn cách biệt.", passive: "Bộ kỹ năng đang được phát triển. Hiện chơi được các hoạt động chung.", skills: [] },
+  connector: { name: "Người kết nối", role: "Cộng đồng · trao đổi", color: "#6984b2", art: 3,
+    description: "Lắng nghe từng câu chuyện và kéo mọi người lại gần.", passive: "Bộ kỹ năng đang được phát triển. Hiện chơi được các hoạt động chung.", skills: [] },
+};
+export function characterProfile(input) {
+  try {
+  requireThat(input && typeof input === "object" && Object.hasOwn(CLASSES, input.classId), "Hãy chọn một class hợp lệ.");
+  requireThat(typeof input.name === "string", "Hãy đặt tên nhân vật.");
+  const name = input.name.trim().normalize("NFC");
+  requireThat(name.length >= 2 && name.length <= 24 && !/[<>\x00-\x1f\x7f]/.test(name), "Tên cần 2–24 ký tự, không chứa ký tự đặc biệt < >.");
+  return { name, classId: input.classId };
+  } catch (error) { error.status = 400; throw error; }
+}
+export function join(w, id, now, profile) {
+  const character = profile ? characterProfile(profile) : {};
   if (w.players[id]) return;
   w.players[id] = {
     id,
     name: `Người dựng làng ${Object.keys(w.players).length + 1}`,
+    ...character,
     ...POINTS.home,
     bag: { wood: 0, stone: 0, food: 0 },
     lastMove: 0,
@@ -255,7 +278,36 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     "Lệnh không hợp lệ.",
   );
   let message = "";
-  if (cmd.type === "build") {
+  if (cmd.type === "character") {
+    const profile = characterProfile(cmd);
+    near(p, POINTS.home);
+    Object.assign(p, profile);
+    message = `Bạn đã chọn ${CLASSES[p.classId].name}.`;
+  } else if (cmd.type === "skill") {
+    requireThat(p.classId === "builder", "Kỹ năng này dành cho Thợ dựng.");
+    requireThat(["collect", "focus"].includes(cmd.skill), "Kỹ năng không hợp lệ.");
+    requireThat(now >= (p.cooldowns?.[cmd.skill] || 0), "Kỹ năng đang hồi. Hãy chờ một chút.");
+    if (cmd.skill === "focus") {
+      p.focusUntil = now + 15000;
+      p.cooldowns = { ...p.cooldowns, focus: now + 60000 };
+      message = "Tập trung: thu thập nhanh trong 15 giây.";
+    } else {
+      const sources = w.resources.filter(r => r.remaining > 0 && Math.hypot(r.x-p.x, r.z-p.z) <= 2);
+      let capacity = Math.min(6, 40 - Object.values(p.bag).reduce((a,b)=>a+b,0));
+      requireThat(capacity > 0, "Túi đã đầy (40 đơn vị).");
+      requireThat(sources.length > 0, "Cần đứng trong 2 ô quanh nguồn gỗ hoặc đá còn vật liệu.");
+      let total = 0;
+      for (const r of sources) {
+        const amount = Math.min(capacity, r.remaining);
+        r.remaining -= amount; p.bag[r.type] += amount;
+        if (r.type === "wood") w.trees = Math.max(0, w.trees - amount * 0.25);
+        capacity -= amount; total += amount;
+        if (!capacity) break;
+      }
+      p.cooldowns = { ...p.cooldowns, collect: now + 30000 };
+      message = `Đã gom ${total} vật liệu quanh bạn.`;
+    }
+  } else if (cmd.type === "build") {
     const problem = placementProblem(w, playerId, cmd.kind, cmd.x, cmd.z);
     requireThat(!problem, problem);
     const definition = BUILDINGS[cmd.kind];
@@ -365,7 +417,7 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     requireThat(r, "Không tìm thấy tài nguyên.");
     near(p, r);
     requireThat(
-      now - p.lastGather >= 500,
+      now - p.lastGather >= (p.classId === "builder" && p.focusUntil > now ? 250 : 500),
       "Đợi một chút trước lần thu thập tiếp theo.",
     );
     requireThat(r.remaining > 0, "Nguồn này đã cạn.");
@@ -373,11 +425,13 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       Object.values(p.bag).reduce((a, b) => a + b, 0) < 40,
       "Túi đã đầy (40 đơn vị).",
     );
-    r.remaining--;
-    p.bag[r.type]++;
+    const amount = Math.min(p.classId === "builder" && r.type === "stone" ? 2 : 1, r.remaining,
+      40 - Object.values(p.bag).reduce((a,b)=>a+b,0));
+    r.remaining -= amount;
+    p.bag[r.type] += amount;
     p.lastGather = now;
     if (r.type === "wood") w.trees = Math.max(0, w.trees - 0.25);
-    message = `Đã nhặt 1 ${r.type === "wood" ? "gỗ" : "đá"}.`;
+    message = `Đã nhặt ${amount} ${r.type === "wood" ? "gỗ" : "đá"}.`;
   } else if (cmd.type === "bridge") {
     near(p, { x: 14, z: 17 });
     requireThat(!w.bridge, "Cầu đã được sửa.");

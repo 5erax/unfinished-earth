@@ -1,3 +1,4 @@
+import { CLASSES } from "/world-rules.js";
 // A functional isometric map for browsers without WebGL. Uses the same server state.
 export class Map2D {
   constructor(container, choose, travel) {
@@ -9,6 +10,11 @@ export class Map2D {
     );
     container.replaceChildren(this.canvas);
     this.ctx = this.canvas.getContext("2d");
+    this.characters = new Image();
+    this.characters.src = "/characters-v1.png";
+    this.characters.onload = () => { if (this.state) this.draw(this.state, this.selected, this.angle, this.preview); };
+    this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    this.actorMotion = new Map();
     this.art = new Image();
     this.art.src = "/world-sprites.png";
     this.art.onload = () => {
@@ -357,6 +363,21 @@ export class Map2D {
         c.beginPath();
         c.ellipse(x, y + t * 0.1, t * 0.42, t * 0.21, 0, 0, Math.PI * 2);
         c.stroke();
+      }
+      if (this.characters.complete && this.characters.naturalWidth && p.classId && CLASSES[p.classId]) {
+        const i = CLASSES[p.classId].art, size = this.characters.naturalWidth / 2;
+        const old = this.actorMotion.get(id), now = performance.now();
+        const moving = old && (Math.abs(p.x-old.x) + Math.abs(p.z-old.z) > 0.001);
+        const face = moving ? (x < old.px ? -1 : 1) : old?.face || 1;
+        const reduced = this.reducedMotion.matches;
+        const bob = moving && !reduced ? Math.sin(now / 75) * t * 0.045 : 0;
+        this.actorMotion.set(id, { x: p.x, z: p.z, px: x, face });
+        c.save(); c.translate(x, y + t * 0.12); c.scale(face, 1);
+        c.drawImage(this.characters, (i % 2) * size, Math.floor(i/2)*size, size, size,
+          -t * 0.82, -t * 1.64 + bob, t * 1.64, t * 1.64);
+        c.restore();
+        if (p.focusUntil > Date.now()) { c.strokeStyle = "#ffd77a"; c.beginPath(); c.ellipse(x,y,t*.52,t*.26,0,0,Math.PI*2); c.stroke(); }
+        continue;
       }
       c.fillStyle = "#263d35";
       c.fillRect(x - t * 0.16, y - t * 0.2, t * 0.12, t * 0.35);

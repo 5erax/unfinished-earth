@@ -16,6 +16,7 @@ let sendingMove = false,
 const held = new Map();
 import {
   BUILDINGS,
+  CLASSES,
   placementProblem,
   housingCapacity,
   walkable as mapWalkable,
@@ -239,7 +240,7 @@ $("join-form").addEventListener("submit", async (e) => {
   try {
     const r = await api("/api/join", {
       method: "POST",
-      body: JSON.stringify({ code: $("access-code").value }),
+      body: JSON.stringify({ code: $("access-code").value, character: { name: $("character-name").value, classId: document.querySelector('[name="join-class"]:checked').value } }),
     });
     if (r.ok) {
       accept(r.data);
@@ -392,6 +393,7 @@ function inputBlocked() {
     ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName) ||
     $("help-dialog").open ||
     $("welcome").open ||
+    $("character-dialog").open ||
     document.hidden
   );
 }
@@ -1252,6 +1254,57 @@ document.addEventListener("visibilitychange", () => {
     held.clear();
   }
 });
+
+function classChoices(container, group, current = "builder") {
+  $(container).replaceChildren(...Object.entries(CLASSES).map(([id, cl]) => {
+    const card = document.createElement("label"); card.className = "class-card";
+    const radio = document.createElement("input"); radio.type = "radio"; radio.name = group; radio.value = id; radio.checked = id === current;
+    const art = document.createElement("span"); art.className = `character-art character-${cl.art}`; art.setAttribute("aria-hidden", "true");
+    const title = document.createElement("strong"); title.textContent = cl.name;
+    const role = document.createElement("span"); role.className = "class-role"; role.textContent = cl.role;
+    const description = document.createElement("p"); description.textContent = cl.description;
+    const detail = document.createElement("small"); detail.textContent = [cl.passive, ...cl.skills].join(" ");
+    card.append(radio, art, title, role, description, detail); return card;
+  }));
+}
+classChoices("class-choices", "join-class");
+$("character-open").onclick = () => {
+  if (!state) return;
+  held.clear(); path = []; queuedAction = null;
+  const p = state.players[state.you];
+  $("profile-name").value = p.name; $("profile-error").textContent = "";
+  classChoices("profile-choices", "profile-class", p.classId || "builder");
+  $("character-dialog").showModal();
+};
+$("character-close").onclick = () => $("character-dialog").close();
+$("character-form").onsubmit = async e => {
+  e.preventDefault(); e.submitter.disabled = true;
+  try {
+    const ok = await command({ type: "character", name: $("profile-name").value, classId: document.querySelector('[name="profile-class"]:checked').value });
+    if (ok) $("character-dialog").close();
+    else $("profile-error").textContent = "Chưa lưu được. Hãy về nơi trú ẩn và chờ các thao tác hoàn tất.";
+  } finally { e.submitter.disabled = false; }
+};
+function useSkill(skill) { if (!inputBlocked()) { held.clear(); path = []; queuedAction = null; command({ type: "skill", skill }); } }
+$("skill-collect").onclick = () => useSkill("collect");
+$("skill-focus").onclick = () => useSkill("focus");
+window.addEventListener("keydown", e => {
+  if (e.repeat || inputBlocked()) return;
+  if (e.key.toLowerCase() === "q") useSkill("collect");
+  if (e.key.toLowerCase() === "r") useSkill("focus");
+});
+setInterval(() => {
+  const p = state?.players[state.you];
+  $("skill-bar").hidden = !p?.classId;
+  if (!p?.classId) return;
+  $("class-name").textContent = CLASSES[p.classId]?.name || "";
+  for (const [key, label] of [["collect", "Q · Gom vật liệu"], ["focus", "R · Tập trung"]]) {
+    const b = $("skill-" + key), left = Math.max(0, Math.ceil(((p.cooldowns?.[key] || 0)-Date.now())/1000));
+    b.hidden = p.classId !== "builder"; b.disabled = !!left || busy || recovering || motion.pending.length > 0;
+    b.textContent = left ? `${label} (${left}s)` : label;
+  }
+}, 250);
+
 await poll();
 setInterval(() => {
   if (!document.hidden) poll();
