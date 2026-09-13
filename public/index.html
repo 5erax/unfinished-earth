@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#111f22" />
+    <title>The Unfinished Earth — Dựng lại một thế giới</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main id="game">
+      <div
+        id="world"
+        aria-label="Bản đồ 3D tương tác. Dùng WASD hoặc các nút di chuyển; chọn địa điểm trong danh sách để đến gần."
+      ></div>
+      <header class="topbar">
+        <a class="brand" href="/"
+          >UE<span>THE UNFINISHED<br />EARTH</span></a
+        >
+        <div class="world-title">
+          THUNG LŨNG ĐẦU TIÊN<span id="clock">Đang kết nối…</span>
+        </div>
+        <div class="connection">
+          <span id="connection">Ngoại tuyến</span
+          ><button id="help" aria-label="Mở hướng dẫn">?</button>
+        </div>
+      </header>
+      <section class="mission panel">
+        <span class="eyebrow">CHƯƠNG 01 / NỐI LẠI HAI BỜ</span>
+        <h1>Một cây cầu.<br />Nhiều cuộc đời.</h1>
+        <p>
+          Cầu gãy khiến lương thực không đến được Làng Hạ. Hãy mở lại tuyến
+          đường và xem thung lũng đổi thay.
+        </p>
+        <ol id="objectives">
+          <li>Thu thập 8 gỗ và 4 đá</li>
+          <li>Sửa cầu qua sông</li>
+          <li>Đưa thức ăn đến Làng Hạ</li>
+        </ol>
+        <div class="villages" id="villages"></div>
+      </section>
+      <aside class="inspect panel">
+        <div class="panel-heading">
+          <span class="eyebrow">ĐỊA ĐIỂM</span><span id="coordinates">—</span>
+        </div>
+        <label class="sr-only" for="places">Chọn địa điểm</label
+        ><select id="places">
+          <option value="home">Nơi trú ẩn</option>
+          <option value="home-wood">Gỗ gần nhà</option>
+          <option value="home-stone">Đá gần nhà</option>
+          <option value="bridge">Cầu đá cũ</option>
+          <option value="gate">Cống tưới</option>
+          <option value="farm">Ruộng chung</option>
+          <option value="depot">Kho và xe kéo</option>
+          <option value="west">Làng Thượng</option>
+          <option value="east">Làng Hạ</option>
+          <option value="ruin">Tàn tích</option>
+        </select>
+        <h2 id="selection-title">Nơi trú ẩn</h2>
+        <p id="selection-description">
+          Ngôi nhà của bạn được bảo hộ. Bắt đầu từ các nguồn gỗ và đá gần đây.
+        </p>
+        <button class="secondary" id="travel">Đi đến địa điểm</button>
+        <div id="actions"></div>
+        <div id="storage-panel" hidden>
+          <p id="storage-stock"></p>
+          <label for="storage-resource">Vật liệu</label>
+          <select id="storage-resource">
+            <option value="wood">Gỗ</option>
+            <option value="stone">Đá</option>
+            <option value="food">Thức ăn</option>
+          </select>
+          <label for="storage-amount">Số lượng</label
+          ><input
+            id="storage-amount"
+            type="number"
+            min="1"
+            max="40"
+            step="1"
+            value="1"
+          />
+          <div class="build-buttons">
+            <button id="deposit">Cất vào kho</button
+            ><button id="withdraw">Lấy ra túi</button>
+          </div>
+        </div>
+        <details id="construction">
+          <summary>Xây dựng</summary>
+          <label for="build-kind">Công trình</label>
+          <select id="build-kind">
+            <option value="storehouse">Kho cá nhân · 4 gỗ + 2 đá</option>
+            <option value="house">Nhà nhỏ · 6 gỗ + 2 đá</option>
+          </select>
+          <p id="build-benefit">Cất tối đa 80 đơn vị. Chỉ bạn được lấy hàng.</p>
+          <p>Chọn ô trên bản đồ hoặc nhập tọa độ ô:</p>
+          <div class="build-coordinates">
+            <label
+              >Ô X<input
+                id="build-x"
+                type="number"
+                min="2"
+                max="29"
+                step="1"
+                value="10" /></label
+            ><label
+              >Ô Z<input
+                id="build-z"
+                type="number"
+                min="2"
+                max="29"
+                step="1"
+                value="22"
+            /></label>
+          </div>
+          <p id="build-feedback" role="status"></p>
+          <div class="build-buttons">
+            <button id="build-travel">Đi tới ô chọn</button
+            ><button id="build-confirm">Xây công trình</button>
+          </div>
+        </details>
+        <div class="ecology">
+          <span class="eyebrow">NHỊP SỐNG THUNG LŨNG</span
+          ><label>Độ ẩm ruộng <strong id="moisture-value">—</strong></label
+          ><meter id="moisture" min="0" max="1"></meter
+          ><label>Đàn cá <strong id="fish-value">—</strong></label
+          ><meter id="fish" min="0" max="100"></meter>
+          <p id="ecology-note"></p>
+        </div>
+      </aside>
+      <section class="chronicle panel">
+        <button id="chronicle-toggle" aria-expanded="true">
+          <span class="eyebrow">BIÊN NIÊN SỬ</span
+          ><span id="event-count">0 sự kiện</span>
+        </button>
+        <div id="events" aria-label="Lịch sử thế giới"></div>
+      </section>
+      <footer class="toolbar panel">
+        <div class="bag">
+          <span class="eyebrow">TRONG TÚI</span>
+          <div>
+            <span>Gỗ <b id="wood">0</b></span
+            ><span>Đá <b id="stone">0</b></span
+            ><span>Thức ăn <b id="food">0</b></span>
+          </div>
+        </div>
+        <div class="controls">
+          <button id="rotate-left" title="Xoay trái 90°">↶</button
+          ><span>WASD · di chuyển<br />Chọn bản đồ · tương tác</span
+          ><button id="rotate-right" title="Xoay phải 90°">↷</button>
+        </div>
+        <div class="save">
+          <span id="save">Chưa vào thế giới</span
+          ><small id="credit">Tín dụng offline: 0 phút</small>
+        </div>
+      </footer>
+      <div class="dpad" aria-label="Điều khiển di chuyển">
+        <button data-move="0,-1" aria-label="Đi về bắc">↑</button
+        ><button data-move="-1,0" aria-label="Đi về tây">←</button
+        ><button data-move="0,1" aria-label="Đi về nam">↓</button
+        ><button data-move="1,0" aria-label="Đi về đông">→</button>
+      </div>
+      <p id="toast" role="status" aria-live="polite"></p>
+    </main>
+    <dialog id="welcome">
+      <form id="join-form">
+        <span class="eyebrow">THE UNFINISHED EARTH / PROTOTYPE 0.1</span>
+        <h2>Thế giới còn dang dở.<br />Bắt đầu từ hai bờ sông.</h2>
+        <p>
+          Bạn đến một thung lũng sau trận mưa lớn. Hai làng vẫn sinh sống, nhưng
+          cây cầu duy nhất đã gãy.
+        </p>
+        <p>
+          Nhặt gỗ, đá → sửa cầu → mở tuyến lương thực.<br />Mỗi thay đổi đều
+          được lưu và để lại dấu vết.
+        </p>
+        <label id="code-label" hidden
+          >Mã thế giới<input
+            id="access-code"
+            type="password"
+            autocomplete="current-password"
+            minlength="16"
+        /></label>
+        <p id="join-error" role="alert"></p>
+        <button class="primary" type="submit">
+          Bước vào thung lũng <span>→</span></button
+        ><small
+          >Prototype kỹ thuật • Đồng hồ thử nghiệm ×30 mặc định<br />Chưa phải
+          MVP đầy đủ • Ưu tiên trình duyệt desktop</small
+        >
+      </form>
+    </dialog>
+    <dialog id="help-dialog">
+      <span class="eyebrow">CÁCH CHƠI</span>
+      <h2>Để lại một thay đổi.</h2>
+      <p>
+        Chọn địa điểm trong bảng bên phải rồi bấm <b>Đi đến địa điểm</b>. Bạn
+        cũng có thể dùng WASD, phím mũi tên hoặc chạm nút di chuyển.
+      </p>
+      <p>
+        Thu thập 8 gỗ + 4 đá, đến bờ tây cầu để sửa. Sau đó lấy thức ăn ở kho và
+        giao Làng Hạ, hoặc để xe giao tự động mỗi hai ngày game khi đang online.
+      </p>
+      <p>
+        Cống tưới cần 4 gỗ + 2 đá khi mở lần đầu. Nước giúp cây lớn nhưng giảm
+        đàn cá. Thu hoạch bổ sung kho chung; NPC đổi nghề hoặc di cư khi thiếu
+        ăn kéo dài.
+      </p>
+      <p>
+        Tự động lưu trên máy chủ. Tín dụng offline được nạp theo thời gian thao
+        tác hợp lệ, tối đa 8 giờ. Đây là mô hình thử nghiệm; đối chiếu offline
+        và stress test 8 người chưa được nghiệm thu.
+      </p>
+      <button class="primary" id="close-help">Trở lại thung lũng</button>
+    </dialog>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

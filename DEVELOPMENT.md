@@ -1,6 +1,6 @@
 # Development
 
-This repository contains the architecture-spike scaffold for **The Unfinished Earth**. It is not yet a playable build.
+This repository contains the architecture-spike scaffold for **The Unfinished Earth**. The playable Node/SQLite and Worker/D1 game is also included in `src/` and `public/`; see `docs/06-playable-prototype.md`. The TypeScript/PostgreSQL spike remains a separate runtime.
 
 ## Requirements
 
@@ -36,6 +36,8 @@ The first world-server process that starts acquires an ownership epoch (`fencing
 
 ```bash
 pnpm typecheck
+pnpm test:workspace
+pnpm build:workspace
 pnpm test
 pnpm build
 ```

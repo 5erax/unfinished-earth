@@ -6,6 +6,8 @@ Khi thay đổi một quyết định nền tảng, cập nhật mọi phần li
 
 Thông số cân bằng là giả thuyết để playtest. Phân biệt rõ dữ liệu đo được, mục tiêu thiết kế và ước lượng. Không đưa khóa truy cập, dữ liệu cá nhân hoặc tài sản chưa có quyền sử dụng vào repository.
 
+Prototype chạy bằng Node.js 24+: `npm ci`, `npm start`; kiểm tra bằng `npm run check` và `npm test`. Mô phỏng nằm trong `src/world.js`, HTTP/session trong `src/server.js`, lưu trữ trong `src/store.js`, giao diện trong `public/`. Thay đổi gameplay phải nêu invariant bị ảnh hưởng và cập nhật kiểm thử có ý nghĩa. Không thay snapshot/save thật để kiểm thử. Xem `docs/06-playable-prototype.md` để phân biệt prototype đã triển khai với MVP còn phải nghiệm thu.
+
 ## Đóng góp mã nguồn prototype
 
 Scaffold architecture spike đã bắt đầu. Mọi PR mã nguồn nên:

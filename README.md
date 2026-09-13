@@ -12,7 +12,26 @@ Game hướng đến chơi solo và co-op PvE trong các thế giới riêng, v�
 
 ## Trạng thái hiện tại
 
-**Giai đoạn tiền sản xuất + architecture spike.** Đã có scaffold mã nguồn cho client web, world server, protocol, simulation và database, nhưng **chưa có game có thể chơi và chưa có benchmark được xác nhận**.
+**Đã có prototype gameplay 0.1 trên nhánh này. Chưa đạt MVP đầy đủ và chưa có benchmark hiệu năng.**
+
+Prototype gồm một vùng 3D dạng greybox, thu thập, sửa cầu, cống tưới, cây trồng, nhà và kho đặt trên bản đồ, xe giao hàng, 24 NPC và Chronicle. Máy chủ Node.js quyết định trạng thái; SQLite lưu world và biên nhận lệnh. Xem [hướng dẫn chạy và giới hạn](docs/06-playable-prototype.md).
+
+### Chạy thử
+
+Cài Node.js 24 trở lên, sau đó:
+
+```sh
+npm ci
+npm start
+```
+
+Mở `http://127.0.0.1:3000`. Dùng danh sách địa điểm để đi đến nguồn gỗ/đá, thu thập **8 gỗ + 4 đá**, sửa cầu rồi lấy thức ăn từ kho và giao cho Làng Hạ. `npm test` chạy kiểm thử mô phỏng và API.
+
+Đồng hồ prototype mặc định **×30** (một ngày game = một phút thực). Đặt `SIM_SPEED=1` để dùng nhịp 30 phút/ngày của thiết kế. Dữ liệu nằm trong `data/world.sqlite`; giữ thư mục này qua lần chạy lại.
+
+Có architecture spike TypeScript/PostgreSQL tại `apps/` và `packages/`; xem [DEVELOPMENT.md](DEVELOPMENT.md). Chạy kiểm thử/build spike bằng `pnpm test:workspace` / `pnpm build:workspace`.
+
+Có [Docker Compose](compose.playable.yaml) cho một máy chủ với ổ dữ liệu bền vững. Có thêm adapter Cloudflare Workers/D1 cho bản staging trên Sites; xem phần staging trong hướng dẫn.
 
 Game Design Bible v0.1 gồm 117 mục, 20 tình huống phát sinh, bản đồ tương tác hệ thống, phạm vi MVP và kế hoạch kiểm chứng. Các con số về quy mô, hiệu năng và tiến độ vẫn là mục tiêu hoặc giả định cần thử nghiệm cho tới khi có evidence từ prototype.
 
@@ -44,11 +63,7 @@ Persistence không đồng nghĩa với mô phỏng mọi cá thể toàn thời
 
 ## Bước tiếp theo
 
-Chạy architecture spike cho issue #1 và #2 trước. Chuỗi MVP cần chứng minh vẫn là:
-
-**xây dựng → nước/đường → nguồn thức ăn → quyết định NPC → lịch sử.**
-
-Lựa chọn stack hiện tại là giả thuyết kỹ thuật có thể kiểm chứng, được giải thích trong `docs/architecture/0001-prototype-stack.md`; không được coi là khóa cho 1.0 trước benchmark.
+Đọc [phạm vi MVP](docs/04-persistence-and-production.md#99-mvp-scope), kiểm tra giả định nhân lực và làm prototype một vùng. Chuỗi cần chứng minh: xây dựng → nước/đường → nguồn thức ăn → quyết định NPC → lịch sử. Prototype 0.1 là bước thử kiến trúc ban đầu; các khoảng cách tới MVP và thứ tự công việc tiếp theo được ghi trong [kế hoạch triển khai](docs/06-playable-prototype.md#khoảng-cách-tới-mvp).
 
 ## Quyền sử dụng
 

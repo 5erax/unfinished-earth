@@ -1,18 +1,33 @@
 {
-  "name": "the-unfinished-earth",
+  "name": "unfinished-earth",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.0.0",
-  "packageManager": "pnpm@12.3.4",
+  "type": "module",
+  "description": "Server-authoritative playable foundation for The Unfinished Earth",
+  "license": "UNLICENSED",
   "engines": {
     "node": ">=24 <25"
   },
   "scripts": {
+    "start": "node src/server.js",
+    "dev": "node scripts/preview.mjs",
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/server.js && node --check src/world.js && node --check public/app.js && node --check src/cloud-worker.js && node --check src/cloud-store.js",
+    "build": "node scripts/build-cloud.mjs",
+    "dev:node": "node --watch src/server.js",
     "dev:client": "pnpm --filter @unfinished-earth/client dev",
     "dev:server": "pnpm --filter @unfinished-earth/world-server dev",
-    "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test",
     "db:generate": "pnpm --filter @unfinished-earth/db db:generate",
-    "db:migrate": "pnpm --filter @unfinished-earth/db db:migrate"
-  }
+    "db:migrate": "pnpm --filter @unfinished-earth/db db:migrate",
+    "build:workspace": "pnpm -r --if-present build",
+    "test:workspace": "pnpm -r --if-present test"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9"
+  },
+  "packageManager": "pnpm@12.3.4"
 }

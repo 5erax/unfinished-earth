@@ -14,3 +14,11 @@ __pycache__/
 Thumbs.db
 work/
 ~$*.docx
+
+# Prototype runtime state
+data/
+*.log
+coverage/
+dist/
+.sites-runtime/
+.wrangler/
