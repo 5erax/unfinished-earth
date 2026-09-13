@@ -10,6 +10,7 @@ if (manifest.d1 !== "DB")
 const files = {
   "/world-rules.js": ["src/world.js", "text/javascript; charset=utf-8"],
   "/map2d.js": ["public/map2d.js", "text/javascript; charset=utf-8"],
+  "/motion.js": ["public/motion.js", "text/javascript; charset=utf-8"],
   "/": ["public/index.html", "text/html; charset=utf-8"],
   "/app.js": ["public/app.js", "text/javascript; charset=utf-8"],
   "/style.css": ["public/style.css", "text/css; charset=utf-8"],

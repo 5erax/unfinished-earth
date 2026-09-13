@@ -1,3 +1,8 @@
+import { Motion } from "/motion.js";
+const motion = new Motion();
+let sendingMove = false,
+  nextMoveAt = 0;
+const held = new Map();
 import {
   BUILDINGS,
   placementProblem,
@@ -90,7 +95,8 @@ function accept(next) {
   }
 }
 async function command(cmd) {
-  if (busy || !state) return false;
+  if (busy || !state || (cmd.type !== "move" && motion.pending.length))
+    return false;
   busy = true;
   const body = JSON.stringify({
     ...cmd,
@@ -217,7 +223,7 @@ function canWalk(x, z) {
 function travel(destination) {
   if (!state || !online) return;
   path = [];
-  const p = state.players[state.you],
+  const p = motion.target(state.you, state.players[state.you], state.you),
     queue = [[p.x, p.z]],
     prev = new Map([[`${p.x},${p.z}`, null]]);
   let found;
@@ -257,44 +263,103 @@ $("travel").onclick = () => {
   const t = target();
   if (t) travel(selected === "bridge" ? { x: 14, z: 17 } : t);
 };
-pathTimer = setInterval(async () => {
-  if (path.length && !busy && online && !$("help-dialog").open) {
-    const [x, z] = path.shift();
-    if (!(await command({ type: "move", x, z }))) path = [];
-  }
-}, 210);
-async function move(dx, dz) {
-  if (!state || busy || !online) return;
-  path = [];
-  const p = state.players[state.you];
-  await command({ type: "move", x: p.x + dx, z: p.z + dz });
-}
-window.addEventListener("keydown", (e) => {
+async function sendMoves() {
   if (
-    ["INPUT", "SELECT", "BUTTON", "TEXTAREA"].includes(
-      document.activeElement?.tagName,
-    ) ||
-    $("help-dialog").open ||
-    $("welcome").open
+    sendingMove ||
+    busy ||
+    !online ||
+    !motion.pending.length ||
+    performance.now() < nextMoveAt
   )
     return;
-  const m = {
-    w: [0, -1],
-    a: [-1, 0],
-    s: [0, 1],
-    d: [1, 0],
-    ArrowUp: [0, -1],
-    ArrowLeft: [-1, 0],
-    ArrowDown: [0, 1],
-    ArrowRight: [1, 0],
-  }[e.key];
-  if (m) {
-    e.preventDefault();
-    move(...m);
+  sendingMove = true;
+  const next = motion.pending[0];
+  const ok = await command({ type: "move", ...next });
+  motion.acknowledge(ok);
+  if (!ok) {
+    path = [];
+    held.clear();
+  }
+  // Space requests after acknowledgement so server-side rate validation remains valid.
+  nextMoveAt = performance.now() + 165;
+  sendingMove = false;
+}
+function move(dx, dz) {
+  if (!state || !online) return;
+  path = [];
+  const p = motion.target(state.you, state.players[state.you], state.you);
+  if (motion.enqueue(state, p.x + dx, p.z + dz, mapWalkable)) sendMoves();
+}
+const directions = {
+  w: [0, -1],
+  a: [-1, 0],
+  s: [0, 1],
+  d: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowLeft: [-1, 0],
+  ArrowDown: [0, 1],
+  ArrowRight: [1, 0],
+};
+function inputBlocked() {
+  return (
+    ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName) ||
+    $("help-dialog").open ||
+    $("welcome").open ||
+    document.hidden
+  );
+}
+let lastStep = 0;
+window.addEventListener("keydown", (e) => {
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (!directions[key] || inputBlocked()) return;
+  e.preventDefault();
+  if (!held.has(key)) {
+    held.set(key, directions[key]);
+    move(...directions[key]);
+    lastStep = performance.now();
   }
 });
-for (const b of document.querySelectorAll("[data-move]"))
-  b.onclick = () => move(...b.dataset.move.split(",").map(Number));
+window.addEventListener("keyup", (e) =>
+  held.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key),
+);
+window.addEventListener("blur", () => {
+  held.clear();
+  path = [];
+});
+for (const b of document.querySelectorAll("[data-move]")) {
+  b.style.touchAction = "none";
+  b.onpointerdown = (e) => {
+    e.preventDefault();
+    b.setPointerCapture(e.pointerId);
+    const d = b.dataset.move.split(",").map(Number);
+    held.set("pointer", d);
+    move(...d);
+    lastStep = performance.now();
+  };
+  b.onpointerup =
+    b.onpointercancel =
+    b.onlostpointercapture =
+      () => held.delete("pointer");
+}
+pathTimer = setInterval(() => {
+  if (!state || !online || inputBlocked()) {
+    held.clear();
+    return;
+  }
+  const now = performance.now();
+  if (now - lastStep >= 180) {
+    if (held.size) {
+      move(...[...held.values()].at(-1));
+      lastStep = now;
+    } else if (path.length && motion.pending.length < 4) {
+      const [x, z] = path[0];
+      if (motion.enqueue(state, x, z, mapWalkable)) path.shift();
+      else path = [];
+      lastStep = now;
+    }
+  }
+  sendMoves();
+}, 16);
 function plot() {
   return { x: Number($("build-x").value), z: Number($("build-z").value) };
 }
@@ -754,7 +819,12 @@ for (const x of [-0.5, 0.5]) {
 scene.add(cart);
 function renderWorld() {
   if (!state) return;
-  fallback?.draw(state, selected, angle, plotPreview());
+  fallback?.draw(
+    state ? { ...state, players: motion.frame(state, 0).players } : state,
+    selected,
+    angle,
+    plotPreview(),
+  );
   for (const b of state.buildings || [])
     if (!builtMeshes.has(b.id)) {
       house(b.x, b.z, b.kind === "house" ? "#b08a55" : "#567a80", b.id, 0.6);
@@ -841,10 +911,21 @@ function positionCamera() {
     16 + Math.cos(angle + Math.PI / 4) * r,
   );
   camera.lookAt(16, 0, 16);
-  fallback?.draw(state, selected, angle, plotPreview());
+  fallback?.draw(
+    state ? { ...state, players: motion.frame(state, 0).players } : state,
+    selected,
+    angle,
+    plotPreview(),
+  );
 }
 function resize() {
-  if (fallback) fallback.draw(state, selected, angle, plotPreview());
+  if (fallback)
+    fallback.draw(
+      state ? { ...state, players: motion.frame(state, 0).players } : state,
+      selected,
+      angle,
+      plotPreview(),
+    );
   if (!renderer) return;
   const w = container.clientWidth,
     h = container.clientHeight;
@@ -896,10 +977,23 @@ container.addEventListener("click", (e) => {
 });
 new ResizeObserver(resize).observe(container);
 resize();
-function animate() {
+let lastFrame = performance.now();
+function animate(now = performance.now()) {
+  const dt = Math.min((now - lastFrame) / 1000, 0.05);
+  lastFrame = now;
+  if (state) {
+    const visual = motion.frame(state, dt);
+    for (const [id, p] of Object.entries(visual.players))
+      playerMeshes.get(id)?.position.set(p.x, 0, p.z);
+    if (fallback && visual.moving)
+      fallback.draw(
+        { ...state, players: visual.players },
+        selected,
+        angle,
+        plotPreview(),
+      );
+  }
   if (renderer) {
-    for (const g of playerMeshes.values())
-      if (g.userData.destination) g.position.lerp(g.userData.destination, 0.22);
     renderer.render(scene, camera);
   }
   requestAnimationFrame(animate);
@@ -908,7 +1002,10 @@ animate();
 window.addEventListener("online", poll);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) poll();
-  else path = [];
+  else {
+    path = [];
+    held.clear();
+  }
 });
 await poll();
 setInterval(() => {
