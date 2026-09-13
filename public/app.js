@@ -1,3 +1,9 @@
+import {
+  BUILDINGS,
+  placementProblem,
+  housingCapacity,
+  walkable as mapWalkable,
+} from "/world-rules.js";
 import { Map2D } from "/map2d.js";
 import * as THREE from "/three.js";
 const $ = (id) => document.getElementById(id);
@@ -170,13 +176,24 @@ $("chronicle-toggle").onclick = () => {
   $("chronicle-toggle").setAttribute("aria-expanded", String(!hidden));
 };
 function select(id) {
+  if ($("construction").open) {
+    const t =
+      P[id] ||
+      state?.resources.find((r) => r.id === id) ||
+      state?.buildings?.find((b) => b.id === id);
+    if (t) {
+      choosePlot(t);
+      return;
+    }
+  }
   selected = id;
   const select = $("places");
   if (![...select.options].some((o) => o.value === id)) {
     const o = document.createElement("option");
     o.value = id;
-    o.textContent =
-      state?.resources.find((r) => r.id === id)?.type === "wood"
+    o.textContent = state?.buildings?.find((b) => b.id === id)
+      ? BUILDINGS[state.buildings.find((b) => b.id === id).kind].name
+      : state?.resources.find((r) => r.id === id)?.type === "wood"
         ? "Rừng cây"
         : "Mỏ đá";
     select.append(o);
@@ -187,17 +204,16 @@ function select(id) {
 }
 $("places").onchange = (e) => select(e.target.value);
 function target() {
-  return P[selected] || state?.resources.find((r) => r.id === selected);
-}
-function canWalk(x, z) {
   return (
-    x >= 1 &&
-    x < 31 &&
-    z >= 1 &&
-    z < 31 &&
-    (x < 15 || x > 17 || (state.bridge && z === 17))
+    P[selected] ||
+    state?.resources.find((r) => r.id === selected) ||
+    state?.buildings?.find((b) => b.id === selected)
   );
 }
+function canWalk(x, z) {
+  return mapWalkable(state, x, z);
+}
+
 function travel(destination) {
   if (!state || !online) return;
   path = [];
@@ -279,6 +295,81 @@ window.addEventListener("keydown", (e) => {
 });
 for (const b of document.querySelectorAll("[data-move]"))
   b.onclick = () => move(...b.dataset.move.split(",").map(Number));
+function plot() {
+  return { x: Number($("build-x").value), z: Number($("build-z").value) };
+}
+function choosePlot(t) {
+  $("build-x").value = t.x;
+  $("build-z").value = t.z;
+  renderConstruction();
+  renderWorld();
+}
+function mapTravel(t) {
+  if ($("construction").open) choosePlot(t);
+  else travel(t);
+}
+function plotPreview() {
+  if (!state || !$("construction").open) return null;
+  const t = plot();
+  return {
+    ...t,
+    valid: !placementProblem(state, state.you, $("build-kind").value, t.x, t.z),
+  };
+}
+function renderConstruction() {
+  if (!state) return;
+  const p = state.players[state.you],
+    kind = $("build-kind").value,
+    definition = BUILDINGS[kind],
+    t = plot();
+  const problem = placementProblem(state, state.you, kind, t.x, t.z);
+  const afford =
+    p.bag.wood >= definition.wood && p.bag.stone >= definition.stone;
+  $("build-benefit").textContent =
+    kind === "house"
+      ? "Thêm 2 chỗ ở cho làng trong bán kính 6 ô. Dân chỉ chuyển đến khi có thức ăn và đường đi."
+      : "Cất tối đa 80 đơn vị. Chỉ chủ kho được cất và lấy hàng.";
+  $("build-feedback").textContent =
+    problem ||
+    (!afford
+      ? `Cần ${definition.wood} gỗ và ${definition.stone} đá trong túi.`
+      : "Ô đất hợp lệ. Sẵn sàng xây.");
+  $("build-feedback").classList.toggle("valid", !problem && afford);
+  $("build-confirm").disabled = !!problem || !afford;
+  $("build-confirm").textContent =
+    `Xây · ${definition.wood} gỗ + ${definition.stone} đá`;
+}
+$("construction").ontoggle = () => {
+  path = [];
+  renderConstruction();
+  renderWorld();
+};
+for (const id of ["build-x", "build-z", "build-kind"])
+  $(id).addEventListener("input", () => {
+    renderConstruction();
+    renderWorld();
+  });
+$("build-travel").onclick = () => travel(plot());
+$("build-confirm").onclick = async () => {
+  const t = plot();
+  if (await command({ type: "build", kind: $("build-kind").value, ...t })) {
+    $("construction").open = false;
+    const b = state.buildings.find((b) => b.x === t.x && b.z === t.z);
+    if (b) select(b.id);
+  }
+};
+for (const [id, direction] of [
+  ["deposit", "deposit"],
+  ["withdraw", "withdraw"],
+])
+  $(id).onclick = () =>
+    command({
+      type: "storage",
+      target: selected,
+      resource: $("storage-resource").value,
+      amount: Number($("storage-amount").value),
+      direction,
+    });
 let actionSpecs = [];
 function action(label, cmd, disabled = false) {
   actionSpecs.push({ label, cmd, disabled });
@@ -325,7 +416,8 @@ function renderUI() {
     const row = document.createElement("div");
     row.className = "village";
     const title = document.createElement("span");
-    title.textContent = `${v.name} · ${population} dân`;
+    const capacity = housingCapacity(state, v.id);
+    title.textContent = `${v.name} · ${population} dân${capacity !== null ? ` / ${capacity} chỗ` : ""}`;
     const food = document.createElement("strong");
     food.className = v.food < population ? "warning" : "";
     food.textContent = `${v.food} khẩu phần`;
@@ -333,7 +425,13 @@ function renderUI() {
     $("villages").append(row);
   }
   const r = state.resources.find((r) => r.id === selected);
-  const [title, description] = copy[selected] || [
+  const building = state.buildings?.find((b) => b.id === selected);
+  const [title, description] = (building
+    ? [
+        BUILDINGS[building.kind].name,
+        `Ô ${building.x}, ${building.z}. ${building.kind === "house" ? "Thêm 2 chỗ ở cho " + state.villages.find((v) => v.id === building.village).name : building.owner === state.you ? "Kho của bạn · sức chứa 80 đơn vị." : "Kho thuộc người chơi khác."}`,
+      ]
+    : copy[selected]) || [
     r?.type === "wood" ? "Rừng cây" : "Mỏ đá",
     `Còn ${r?.remaining ?? 0} đơn vị. Mỗi lần thu thập lấy một đơn vị, túi tối đa 40.`,
   ];
@@ -396,6 +494,20 @@ function renderUI() {
       { type: "explore" },
       p.discoveries.includes("ruin"),
     );
+  $("storage-panel").hidden = !(
+    building?.kind === "storehouse" && building.owner === state.you
+  );
+  if (building?.kind === "storehouse")
+    $("storage-stock").textContent =
+      `Trong kho: ${building.stock.wood} gỗ · ${building.stock.stone} đá · ${building.stock.food} thức ăn`;
+  for (const b of state.buildings || [])
+    if (![...$("places").options].some((o) => o.value === b.id)) {
+      const o = document.createElement("option");
+      o.value = b.id;
+      o.textContent = `${BUILDINGS[b.kind].name} · ${b.x},${b.z}`;
+      $("places").append(o);
+    }
+  renderConstruction();
   commitActions();
   $("moisture").value = state.moisture;
   $("fish").value = state.fish;
@@ -448,7 +560,7 @@ try {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.append(renderer.domElement);
 } catch {
-  fallback = new Map2D(container, select, travel);
+  fallback = new Map2D(container, select, mapTravel);
 }
 scene.add(new THREE.HemisphereLight(0xdff4df, 0x354c44, 2.5));
 const sun = new THREE.DirectionalLight(0xffe1a9, 3.4);
@@ -607,6 +719,7 @@ for (let i = 0; i < 20; i++) {
 }
 const waterChannel = box(3, 0.03, 0.45, "#70b1b2", 12, -0.11, 10.7);
 waterChannel.visible = false;
+const builtMeshes = new Map();
 const resourceMeshes = new Map(),
   playerMeshes = new Map(),
   npcMeshes = new Map();
@@ -641,7 +754,17 @@ for (const x of [-0.5, 0.5]) {
 scene.add(cart);
 function renderWorld() {
   if (!state) return;
-  fallback?.draw(state, selected, angle);
+  fallback?.draw(state, selected, angle, plotPreview());
+  for (const b of state.buildings || [])
+    if (!builtMeshes.has(b.id)) {
+      house(b.x, b.z, b.kind === "house" ? "#b08a55" : "#567a80", b.id, 0.6);
+      builtMeshes.set(b.id, true);
+    }
+  const preview = plotPreview();
+  if (preview) {
+    cursor.position.set(preview.x, 0.06, preview.z);
+    cursor.material.color.set(preview.valid ? "#bddd92" : "#e49b81");
+  } else cursor.material.color.set("#f9da87");
   deck.visible = state.bridge;
   waterChannel.visible = state.gate;
   crops.scale.y = 0.15 + state.crop;
@@ -703,7 +826,7 @@ function renderWorld() {
     );
   });
   const t = target();
-  if (t) cursor.position.set(t.x, 0.06, t.z);
+  if (t && !preview) cursor.position.set(t.x, 0.06, t.z);
   cart.position.set(
     state.cart.cargo ? 18 : 12,
     0.1,
@@ -718,10 +841,10 @@ function positionCamera() {
     16 + Math.cos(angle + Math.PI / 4) * r,
   );
   camera.lookAt(16, 0, 16);
-  fallback?.draw(state, selected, angle);
+  fallback?.draw(state, selected, angle, plotPreview());
 }
 function resize() {
-  if (fallback) fallback.draw(state, selected, angle);
+  if (fallback) fallback.draw(state, selected, angle, plotPreview());
   if (!renderer) return;
   const w = container.clientWidth,
     h = container.clientHeight;
@@ -762,14 +885,14 @@ container.addEventListener("click", (e) => {
     }
     return true;
   });
-  if (hits.length) {
+  if (hits.length && !$("construction").open) {
     select(hits[0].object.userData.target);
     return;
   }
   const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
     v = new THREE.Vector3();
   if (raycaster.ray.intersectPlane(ground, v))
-    travel({ x: Math.round(v.x), z: Math.round(v.z) });
+    mapTravel({ x: Math.round(v.x), z: Math.round(v.z) });
 });
 new ResizeObserver(resize).observe(container);
 resize();

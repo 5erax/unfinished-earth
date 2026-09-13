@@ -80,7 +80,7 @@ export class Map2D {
     c.textAlign = "center";
     c.fillText(text, x, y + 3);
   }
-  draw(state, selected, angle = 0) {
+  draw(state, selected, angle = 0, preview = null) {
     this.state = state;
     this.angle = angle;
     this.w = this.container.clientWidth;
@@ -131,6 +131,13 @@ export class Map2D {
     for (let x = 9; x <= 11; x++)
       for (let z = 11; z <= 13; z++)
         this.tileAt(x, z, state?.crop >= 1 ? "#c6bd70" : "#789351");
+    if (preview && Number.isFinite(preview.x) && Number.isFinite(preview.z))
+      this.tileAt(
+        preview.x,
+        preview.z,
+        preview.valid ? "#c3df8b" : "#e19982",
+        0.05,
+      );
     const add = (id, x, z, label) => {
       const [px, py] = this.project(x, z);
       this.targets.push({ id, x, z, px, py, label });
@@ -155,6 +162,10 @@ export class Map2D {
         objects.push({ id, x, z, kind: "house" });
       if (id === "ruin" || id === "gate")
         objects.push({ id, x, z, kind: "stone" });
+    }
+    for (const b of state?.buildings || []) {
+      add(b.id, b.x, b.z, b.kind === "house" ? "Nhà nhỏ" : "Kho cá nhân");
+      objects.push({ ...b, kind: "house" });
     }
     objects.sort(
       (a, b) => this.project(a.x, a.z)[1] - this.project(b.x, b.z)[1],

@@ -13,6 +13,93 @@ export const POINTS = {
   ruin: { x: 25, z: 25 },
   depot: { x: 11, z: 19 },
 };
+export const BUILDINGS = {
+  house: { name: "Nhà nhỏ", wood: 6, stone: 2, beds: 2 },
+  storehouse: { name: "Kho cá nhân", wood: 4, stone: 2, capacity: 80 },
+};
+export function housingCapacity(w, village) {
+  if (!w.housingBase) return null;
+  return (
+    w.housingBase[village] +
+    (w.buildings || []).filter(
+      (b) => b.kind === "house" && b.village === village,
+    ).length *
+      2
+  );
+}
+function reservedTile(x, z) {
+  return (
+    Object.values(POINTS).some((p) => Math.hypot(x - p.x, z - p.z) <= 2) ||
+    (x === 7 && z >= 8 && z <= 22) ||
+    (z === 17 && x >= 7 && x <= 25) ||
+    (x === 24 && z >= 12 && z <= 17)
+  );
+}
+export function placementProblem(w, playerId, kind, x, z) {
+  if (!Object.hasOwn(BUILDINGS, kind)) return "Loại công trình không hợp lệ.";
+  if (
+    !Number.isInteger(x) ||
+    !Number.isInteger(z) ||
+    x < 2 ||
+    z < 2 ||
+    x > 29 ||
+    z > 29
+  )
+    return "Chọn ô đất từ 2 đến 29.";
+  if (!walkable(w, x, z) || (x >= 15 && x <= 17))
+    return "Không thể xây trên sông hoặc công trình khác.";
+  if (reservedTile(x, z))
+    return "Giữ trống đường đi và khu công trình hiện có.";
+  if (
+    (w.resources || []).some((r) => r.x === x && r.z === z && r.remaining > 0)
+  )
+    return "Thu thập hết tài nguyên trên ô này trước.";
+  if (Object.values(w.players).some((p) => p.x === x && p.z === z))
+    return "Có người chơi đang đứng trên ô này.";
+  if ((w.buildings || []).length >= 64)
+    return "Vùng thử nghiệm đã đủ 64 công trình.";
+  if (
+    kind === "house" &&
+    ![POINTS.west, POINTS.east].some((p) => Math.hypot(x - p.x, z - p.z) <= 6)
+  )
+    return "Đặt nhà trong 6 ô quanh một làng để bổ sung chỗ ở.";
+  const p = w.players[playerId];
+  if (!p || Math.hypot(p.x - x, p.z - z) > 2.5)
+    return "Hãy đi tới gần ô đất trước khi xây.";
+  // Removing this cell must not disconnect any of its existing walkable neighbours.
+  const neighbours = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ]
+    .map(([dx, dz]) => [x + dx, z + dz])
+    .filter(([a, b]) => walkable(w, a, b));
+  if (neighbours.length > 1) {
+    const queue = [neighbours[0]],
+      seen = new Set([neighbours[0].join(",")]);
+    for (let i = 0; i < queue.length; i++) {
+      const [a, b] = queue[i];
+      for (const [dx, dz] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]) {
+        const nx = a + dx,
+          nz = b + dz,
+          key = `${nx},${nz}`;
+        if ((nx === x && nz === z) || seen.has(key) || !walkable(w, nx, nz))
+          continue;
+        seen.add(key);
+        queue.push([nx, nz]);
+      }
+    }
+    if (neighbours.some((n) => !seen.has(n.join(","))))
+      return "Công trình sẽ bịt lối đi. Hãy chọn ô khác.";
+  }
+  return null;
+}
 const names = [
   "An",
   "Bình",
@@ -127,6 +214,7 @@ export function walkable(w, x, z) {
     z >= SIZE - 1
   )
     return false;
+  if ((w.buildings || []).some((b) => b.x === x && b.z === z)) return false;
   return x < 15 || x > 17 || (w.bridge && z === 17);
 }
 const requireThat = (condition, message) => {
@@ -167,7 +255,75 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     "Lệnh không hợp lệ.",
   );
   let message = "";
-  if (cmd.type === "move") {
+  if (cmd.type === "build") {
+    const problem = placementProblem(w, playerId, cmd.kind, cmd.x, cmd.z);
+    requireThat(!problem, problem);
+    const definition = BUILDINGS[cmd.kind];
+    spend(p, definition.wood, definition.stone);
+    const village = ["west", "east"].sort(
+      (a, b) =>
+        Math.hypot(cmd.x - POINTS[a].x, cmd.z - POINTS[a].z) -
+        Math.hypot(cmd.x - POINTS[b].x, cmd.z - POINTS[b].z),
+    )[0];
+    if (cmd.kind === "house" && !w.housingBase)
+      w.housingBase = Object.fromEntries(
+        w.villages.map((v) => [
+          v.id,
+          Math.max(12, w.npcs.filter((n) => n.village === v.id).length),
+        ]),
+      );
+    w.buildingSeq = (w.buildingSeq || 0) + 1;
+    const building = {
+      id: `building-${w.buildingSeq}`,
+      kind: cmd.kind,
+      x: cmd.x,
+      z: cmd.z,
+      owner: playerId,
+      village,
+      stock: { wood: 0, stone: 0, food: 0 },
+    };
+    (w.buildings ??= []).push(building);
+    building.cause = event(
+      w,
+      "build",
+      `${p.name} xây ${definition.name.toLowerCase()} tại ô ${cmd.x}, ${cmd.z}${cmd.kind === "house" ? `: thêm 2 chỗ ở cho ${w.villages.find((v) => v.id === village).name}` : " với sức chứa 80 đơn vị"}.`,
+      building.id,
+    );
+    message = `Đã xây ${definition.name.toLowerCase()}.`;
+  } else if (cmd.type === "storage") {
+    const b = (w.buildings || []).find((b) => b.id === cmd.target);
+    requireThat(b && b.kind === "storehouse", "Không tìm thấy kho cá nhân.");
+    requireThat(b.owner === playerId, "Chỉ chủ kho được cất hoặc lấy hàng.");
+    near(p, b);
+    requireThat(
+      ["wood", "stone", "food"].includes(cmd.resource),
+      "Vật liệu không hợp lệ.",
+    );
+    requireThat(
+      Number.isInteger(cmd.amount) && cmd.amount > 0 && cmd.amount <= 40,
+      "Số lượng phải từ 1 đến 40.",
+    );
+    requireThat(
+      cmd.direction === "deposit" || cmd.direction === "withdraw",
+      "Thao tác kho không hợp lệ.",
+    );
+    const source = cmd.direction === "deposit" ? p.bag : b.stock,
+      dest = cmd.direction === "deposit" ? b.stock : p.bag,
+      limit = cmd.direction === "deposit" ? 80 : 40;
+    requireThat(
+      source[cmd.resource] >= cmd.amount,
+      "Không đủ vật liệu để chuyển.",
+    );
+    requireThat(
+      Object.values(dest).reduce((a, b) => a + b, 0) + cmd.amount <= limit,
+      cmd.direction === "deposit"
+        ? "Kho đã đầy (80 đơn vị)."
+        : "Túi đã đầy (40 đơn vị).",
+    );
+    source[cmd.resource] -= cmd.amount;
+    dest[cmd.resource] += cmd.amount;
+    message = `Đã ${cmd.direction === "deposit" ? "cất" : "lấy"} ${cmd.amount} ${{ wood: "gỗ", stone: "đá", food: "khẩu phần" }[cmd.resource]}.`;
+  } else if (cmd.type === "move") {
     requireThat(now - p.lastMove >= 160, "Bạn đang di chuyển quá nhanh.");
     requireThat(
       walkable(w, cmd.x, cmd.z) &&
@@ -383,13 +539,20 @@ export function simulateDay(w, production = true) {
     }
   }
   for (const { n, destination } of decisions) {
+    const capacity = housingCapacity(w, destination.id);
+    if (
+      capacity !== null &&
+      w.npcs.filter((person) => person.village === destination.id).length >=
+        capacity
+    )
+      continue;
     const from = n.village;
     n.village = destination.id;
     n.hungryDays = 0;
     event(
       w,
       "npc",
-      `${n.name} rời ${from === "east" ? "Làng Hạ" : "Làng Thượng"} đến ${destination.name}: thiếu ăn ba ngày, làng nhận còn dự trữ và cầu đã thông.`,
+      `${n.name} rời ${from === "east" ? "Làng Hạ" : "Làng Thượng"} đến ${destination.name}: thiếu ăn ba ngày, làng nhận còn dự trữ${w.housingBase ? " và chỗ ở" : ""}, cầu đã thông.`,
       destination.id,
       w.bridgeCause ? [w.bridgeCause] : [],
     );

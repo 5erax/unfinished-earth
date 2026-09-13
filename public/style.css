@@ -618,3 +618,64 @@ input {
     scroll-behavior: auto !important;
   }
 }
+
+.inspect {
+  max-height: calc(100dvh - 235px);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+#construction {
+  border-top: 1px solid #ffffff25;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+#construction summary {
+  cursor: pointer;
+  color: #e6c984;
+  font-size: 15px;
+  font-weight: 600;
+}
+#construction label,
+#storage-panel label {
+  display: block;
+  font-size: 13px;
+  margin: 12px 0 7px;
+}
+#construction p,
+#storage-panel p {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.build-coordinates,
+.build-buttons {
+  display: flex;
+  gap: 8px;
+}
+.build-coordinates label {
+  min-width: 0;
+  flex: 1;
+}
+.build-coordinates input {
+  margin-top: 5px;
+  padding: 8px;
+}
+.build-buttons button {
+  flex: 1;
+  padding: 10px 6px;
+}
+#build-confirm {
+  background: #d8b877;
+  color: #142a28;
+}
+#build-feedback {
+  color: #e1bd83 !important;
+}
+#build-feedback.valid {
+  color: #b7d69d !important;
+}
+@media (max-width: 760px) {
+  .inspect {
+    max-height: none;
+    overflow: visible;
+  }
+}

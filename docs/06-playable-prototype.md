@@ -8,7 +8,7 @@ Kiểm chứng chuỗi nhỏ có thể thao tác: lấy vật liệu → sửa c
 | --- | --- | --- |
 | Client | Three.js trực giao, xoay 90°, nhân vật, click chọn vật thể, WASD, tìm đường và bảng tương tác tiếng Việt | Đã kiểm tra desktop bằng bản đồ 2D tương thích; trình duyệt kiểm tra thiếu WebGL nên chưa xác minh hình ảnh 3D/FPS |
 | Vùng | Lưới 32 × 32 đại diện 512 × 512 m, hai làng, một ruin | Bước di chuyển theo ô là abstraction của greybox; chưa đạt vận tốc, va chạm và navmesh của thiết kế |
-| Xây dựng | Cầu cố định 8 gỗ/4 đá, cống cố định 4 gỗ/2 đá | Chưa có placement tự do, 8 building definitions, nhà một tầng tùy chỉnh, condition/repair |
+| Xây dựng | Cầu cố định 8 gỗ/4 đá, cống cố định 4 gỗ/2 đá | Có đặt nhà nhỏ và kho cá nhân; chưa đủ 8 building definitions, nhà tùy chỉnh, condition/repair |
 | Hậu cần | Túi 40 đơn vị, kho chung, xe chở 8 khẩu phần trong hai ngày | Xe dùng tiến độ theo ngày, chưa pathfind vật lý; chưa có cầu hỏng giữa chuyến và cargo recovery |
 | Sinh thái | Cống → độ ẩm/cá → crop, cỏ, grazer/predator; chu kỳ nắng/mưa/hạn | Là chỉ số thử nghiệm, chưa ledger nước m³, lũ không gian, sinh vật có reservation/ID, LOD hoặc seed đa dạng |
 | NPC | 24 danh tính; ăn, đổi nghề khi thiếu ăn ba ngày và ruộng đủ ẩm; di cư khi có cầu và làng nhận còn dự trữ | Chưa housing capacity, cooldown đầy đủ, tuổi đời hoặc hành vi đi lại vật lý |
@@ -17,7 +17,7 @@ Kiểm chứng chuỗi nhỏ có thể thao tác: lấy vật liệu → sửa c
 | Offline | Một deadline 72 giờ từ đầu vắng; xe ngừng khi hết tín dụng 8 giờ; reconnect không tự cộng tín dụng | Credit tiêu theo lát thời gian đến cuối ngày; chưa production theo giây, equivalence toàn ledger hay mọi edge case T07–T11 |
 | Chronicle | Event có ID/ngày/địa điểm/causeIds; tồn tại qua save; client xem 60 gần nhất và tra nguyên nhân cũ | Chưa quyền biết, evidence certainty hoặc lịch sử truy vấn/phân trang đầy đủ |
 
-Các khác biệt ở cột cuối là khoảng trống triển khai, không thay thế các quyết định A01–A13 của Game Design Bible. Render nhà cố định chỉ giúp định vị; không suy ra đã có hệ thống xây nhà. Không có chiến đấu hoặc tiền tệ ở bản này.
+Các khác biệt ở cột cuối là khoảng trống triển khai, không thay thế các quyết định A01–A13 của Game Design Bible. Nhà nhỏ có thể xây bổ sung hai chỗ ở cho làng gần nhất. Không có chiến đấu hoặc tiền tệ ở bản này.
 
 ## Chạy trên máy cá nhân
 
@@ -114,6 +114,12 @@ Thêm `src/cloud-worker.js` và `src/cloud-store.js` để chạy trên Worker v
 
 D1 batch commit snapshot + receipt trong một transaction. Revision compare-and-swap và receipt guard ngăn mất cập nhật/lặp lệnh giữa các Worker instance. Mỗi request đọc qua D1 session `first-primary`. Phiên dùng cookie HttpOnly/SameSite và có Secure trên HTTPS. Site giữ quyền truy cập riêng của chủ sở hữu; không công khai hoặc mời người ngoài trong bước này.
 
-Worker không giữ bộ đếm thời gian trong RAM: mỗi request cập nhật bù từ save; sau heartbeat cuối 15 giây chuyển sang trạng thái vắng. Deadline 72 giờ được giữ qua cold start. Giới hạn 100 nhân vật cho staging; chưa có UI thu hồi phiên hoặc compaction dài hạn. Bản kiểm thử có 14 tests, bao gồm hai session độc lập, tranh tài nguyên, receipt race, CAS retry và reopen DB bằng runtime adapter. Đây chưa phải đo tải D1 thực hoặc playtest hai người thật qua hai trình duyệt.
+Worker không giữ bộ đếm thời gian trong RAM: mỗi request cập nhật bù từ save; sau heartbeat cuối 15 giây chuyển sang trạng thái vắng. Deadline 72 giờ được giữ qua cold start. Giới hạn 100 nhân vật cho staging; chưa có UI thu hồi phiên hoặc compaction dài hạn. Bản kiểm thử có 21 tests, bao gồm hai session độc lập, tranh tài nguyên, receipt race, CAS retry và reopen DB bằng runtime adapter. Đây chưa phải đo tải D1 thực hoặc playtest hai người thật qua hai trình duyệt.
 
 Giao diện tự dùng bản đồ Canvas 2D khi WebGL không có. Các nút hành động giữ DOM ổn định qua heartbeat; mã lệnh dùng Web Crypto getRandomValues để hoạt động cả trong preview HTTP.
+
+### Xây nhà và kho
+
+Mở **Xây dựng**, chọn loại và ô trên bản đồ hoặc nhập tọa độ. Đi tới ô chọn rồi xây khi đủ vật liệu. Nhà nhỏ cần 6 gỗ/2 đá, nằm gần làng; kho cần 4 gỗ/2 đá, chứa 80 đơn vị. Chỉ chủ kho được cất/lấy; túi vẫn giới hạn 40. Không được xây trên sông, đường chính, tài nguyên, nhân vật hoặc bịt lối đi. Tối đa 64 công trình, chưa có tháo dỡ.
+
+Save cũ giữ nguyên. Khi xây căn nhà đầu tiên, sức chứa nền mỗi làng lấy tối thiểu 12 hoặc dân số hiện tại nếu cao hơn, rồi cộng hai chỗ cho mỗi nhà mới. Di cư từ đó chịu giới hạn chỗ ở.

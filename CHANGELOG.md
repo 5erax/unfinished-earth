@@ -1,5 +1,9 @@
 # Lịch sử thay đổi
 
+## 2026-09-13 — Nhà và kho có thể xây
+
+Thêm nhà nhỏ (6 gỗ/2 đá, thêm hai chỗ ở) và kho cá nhân (4 gỗ/2 đá, chứa 80 đơn vị). Có chọn ô trên bản đồ, báo lỗi vị trí và cất/lấy tài nguyên. Máy chủ kiểm tra vật liệu, quyền sở hữu và đường đi; bảo toàn save cũ. 21 kiểm thử mô phỏng/API đạt, gồm tranh ô xây và gửi lại lệnh.
+
 ## 2026-09-12 — Staging và kiểm thử giao diện
 
 Bổ sung Worker/D1, transaction CAS chống mất cập nhật giữa instance, migration và build cho Sites. Bản đồ 2D tự thay thế khi không có WebGL. Sửa mã lệnh trong preview HTTP và giữ nút thao tác ổn định qua heartbeat. 14 kiểm thử mô phỏng/API đạt; kiểm tra trực quan desktop và chuỗi xây cầu/giao thức ăn đã chạy trên preview.

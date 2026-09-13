@@ -14,7 +14,7 @@ Game hướng đến chơi solo và co-op PvE trong các thế giới riêng, v�
 
 **Đã có prototype gameplay 0.1 trên nhánh này. Chưa đạt MVP đầy đủ và chưa có benchmark hiệu năng.**
 
-Prototype gồm một vùng 3D dạng greybox, thu thập, sửa cầu, cống tưới, cây trồng, xe giao hàng, 24 NPC và Chronicle. Máy chủ Node.js quyết định trạng thái; SQLite lưu world và biên nhận lệnh. Xem [hướng dẫn chạy và giới hạn](docs/06-playable-prototype.md).
+Prototype gồm một vùng 3D dạng greybox, thu thập, sửa cầu, cống tưới, cây trồng, nhà và kho đặt trên bản đồ, xe giao hàng, 24 NPC và Chronicle. Máy chủ Node.js quyết định trạng thái; SQLite lưu world và biên nhận lệnh. Xem [hướng dẫn chạy và giới hạn](docs/06-playable-prototype.md).
 
 ### Chạy thử
 
