@@ -1,5 +1,9 @@
 # Lịch sử thay đổi
 
+## 2026-09-13 — Sao lưu và restore drill SQLite
+
+Thêm CLI backup/verify/restore, sao chép nhất quán cả WAL, giữ session và receipt, kiểm tra phiên bản và integrity, từ chối ghi đè. Restore drill trên dữ liệu tạm xác minh kho/túi và khả năng trả biên nhận cũ. 31 kiểm thử game; chưa sao lưu D1 cloud hoặc PostgreSQL.
+
 ## 2026-09-13 — Khôi phục lệnh và kiểm thử crash
 
 Lưu thao tác chưa xác nhận trong trình duyệt, tự khôi phục bằng mã cũ khi nối mạng/tải lại và hiển thị trạng thái đồng bộ. Tách bản ghi theo nhân vật và thao tác để nhiều tab không ghi đè. Thêm kiểm thử mất ACK và SIGKILL sau commit; 28 kiểm thử game đạt.

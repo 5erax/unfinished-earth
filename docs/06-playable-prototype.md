@@ -77,7 +77,7 @@ Compose chỉ mở `127.0.0.1:3000` trên host. Đặt HTTPS reverse proxy phía
 
 Dùng volume `earth-data`; không dùng filesystem tạm của serverless cho SQLite. Không chạy `docker compose -f compose.playable.yaml down -v` nếu muốn giữ save. Bản này chưa phù hợp GitHub Pages hoặc chức năng serverless không có ổ bền vững. Chưa build/chạy image Docker trong phiên phát triển này; cần smoke test trên host đích trước đưa cho người chơi.
 
-Sao lưu an toàn: dừng container để đóng DB, sao chép **toàn bộ volume** sang nơi lưu khác, rồi khởi động lại. Khôi phục vào volume mới, giữ cùng schemaVersion/simVersion, mở trên bản sao và xác minh nhân vật, túi, cầu, kho, NPC, Chronicle. Chưa có script migration; bản không khớp version sẽ từ chối mở save.
+Có công cụ sao lưu nhất quán khi SQLite đang chạy và kiểm tra/khôi phục vào tệp mới; xem phần dưới. Chưa có script migration; bản không khớp version sẽ từ chối mở save.
 
 ## Bằng chứng kiểm thử
 
@@ -129,3 +129,21 @@ Save cũ giữ nguyên. Khi xây căn nhà đầu tiên, sức chứa nền mỗ
 Client lưu thao tác vào trình duyệt trước khi gửi. Khi mất phản hồi hoặc tải lại trang, game tự gửi lại cùng mã thao tác sau khi nhận diện đúng nhân vật. Máy chủ dùng biên nhận đã lưu để trả lại kết quả mà không xây/trừ vật liệu lần nữa. Lỗi máy chủ và hết phiên không xóa thao tác đang chờ; nhân vật khác không tự nhận thao tác đó. Khi chưa xác nhận được kết quả, thao tác mới tạm dừng và bảng đồng bộ có nút kết nối lại.
 
 28 kiểm thử đạt, gồm mất ACK khi xây kho rồi mở lại client, hai tab không ghi đè biên nhận, lỗi 5xx/hết phiên, và SIGKILL tiến trình Node ngay sau commit rồi mở lại SQLite. Crash drill dùng cơ sở dữ liệu tạm, không tác động save thật. Chưa nghiệm thu crash hạ tầng D1 thật, migration/rollback hoặc compaction dài hạn. Xóa dữ liệu trình duyệt vẫn làm mất bản ghi client và cookie; đây chưa phải cơ chế khôi phục tài khoản.
+
+### Sao lưu và khôi phục máy chủ SQLite
+
+Chạy bằng Node.js 24, trong thư mục repo. Chọn đường dẫn đang dùng bởi máy chủ (mặc định `data/world.sqlite`). Tạo thư mục riêng để giữ bản sao:
+
+```sh
+mkdir -p backups
+node scripts/world-backup.mjs backup data/world.sqlite backups/world-2026-09-13.sqlite
+node scripts/world-backup.mjs verify backups/world-2026-09-13.sqlite
+mkdir -p data/restored
+node scripts/world-backup.mjs restore backups/world-2026-09-13.sqlite data/restored/world.sqlite
+```
+
+Công cụ dùng SQLite VACUUM INTO để lấy snapshot nhất quán, gồm cả thay đổi đã commit trong WAL. Bản sao chứa toàn bộ bảng thế giới, phiên đăng nhập và biên nhận lệnh; không chỉ JSON gameplay. Công cụ kiểm tra integrity, phiên bản, tồn kho, danh tính và liên kết session/receipt trước khi công bố tệp. Báo cáo in số lượng và SHA-256, không in session token. Tệp có quyền 0600; lưu bản sao ở nơi riêng tư và chuyển thêm một bản sang thiết bị/ổ lưu trữ độc lập.
+
+`restore` luôn tạo tệp mới, từ chối ghi đè tệp có sẵn hoặc khôi phục vào nguồn. Sau khi kiểm tra bản sao, dừng máy chủ cũ rồi chạy `DATA_DIR=data/restored npm start` để dùng bản khôi phục. Giữ cả dữ liệu cũ cho tới khi đã xác minh nhân vật, kho và lịch sử trên bản khôi phục. Chạy máy chủ cũ và bản khôi phục cùng lúc sẽ tạo hai thế giới độc lập; không có cơ chế hợp nhất tự động.
+
+Hỗ trợ Node/SQLite và SQLite của adapter D1 cục bộ. Không kết nối database D1 cloud, PostgreSQL hoặc sao lưu dữ liệu cloud thật. Công cụ không thay thế migration/rollback và chưa có lịch sao lưu tự động. Ba kiểm thử restore mới bao phủ WAL đang mở, session/receipt, snapshot D1 cục bộ, từ chối ghi đè và save không hợp lệ. Tổng cộng 31 kiểm thử game.

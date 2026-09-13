@@ -22,3 +22,9 @@ coverage/
 dist/
 .sites-runtime/
 .wrangler/
+
+# World backups contain private sessions and receipts
+backups/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
