@@ -54,7 +54,7 @@ export function placementProblem(w, playerId, kind, x, z) {
     (w.resources || []).some((r) => r.x === x && r.z === z && r.remaining > 0)
   )
     return "Thu thập hết tài nguyên trên ô này trước.";
-  if (Object.values(w.players).some((p) => p.x === x && p.z === z))
+  if (Object.values(w.players).some((p) => Math.abs(p.x-x) <= .72 && Math.abs(p.z-z) <= .72))
     return "Có người chơi đang đứng trên ô này.";
   if ((w.buildings || []).length >= 64)
     return "Vùng thử nghiệm đã đủ 64 công trình.";
@@ -203,6 +203,60 @@ export function createWorld(now = Date.now()) {
     "bridge",
   );
   return w;
+}
+// Continuous navigation uses expanded obstacle rectangles (actor radius 0.22).
+export const MOVE_SPEED = 5;
+export function obstacles(w) {
+  const river = w.bridge ? [[14.28,0,17.72,16.72],[14.28,17.28,17.72,32]] : [[14.28,0,17.72,32]];
+  return [...river, ...(w.buildings || []).map(b => [b.x-.72,b.z-.72,b.x+.72,b.z+.72])];
+}
+function pointFree(rects, x, z) {
+  return Number.isFinite(x) && Number.isFinite(z) && x >= 1 && z >= 1 && x <= 30 && z <= 30 &&
+    !rects.some(([l,t,r,b]) => x >= l && x <= r && z >= t && z <= b);
+}
+function clearSegment(rects, a, b) {
+  if (!pointFree(rects,a.x,a.z) || !pointFree(rects,b.x,b.z)) return false;
+  for (const [l,t,r,d] of rects) {
+    let lo=0, hi=1;
+    for (const [start, delta, min, max] of [[a.x,b.x-a.x,l,r],[a.z,b.z-a.z,t,d]]) {
+      if (Math.abs(delta)<1e-12) { if(start<min || start>max) { lo=2; break; } }
+      else { const u=(min-start)/delta, v=(max-start)/delta; lo=Math.max(lo,Math.min(u,v)); hi=Math.min(hi,Math.max(u,v)); }
+    }
+    if (lo<=hi) return false;
+  }
+  return true;
+}
+export function freeSegment(w,a,b) { return clearSegment(obstacles(w),a,b); }
+export function findRoute(w,start,destination,radius=0) {
+  const rects=obstacles(w);
+  if (!pointFree(rects,start.x,start.z) || !Number.isFinite(destination.x) || !Number.isFinite(destination.z)) return null;
+  if (radius>0 && Math.hypot(start.x-destination.x,start.z-destination.z)<=radius) return [];
+  const goals=[];
+  if (pointFree(rects,destination.x,destination.z)) goals.push(destination);
+  if(radius>0) for(let i=0;i<24;i++) {
+    const a=i*Math.PI/12, p={x:destination.x+Math.cos(a)*radius,z:destination.z+Math.sin(a)*radius};
+    if(pointFree(rects,p.x,p.z)) goals.push(p);
+  }
+  if(!goals.length) return null;
+  const nodes=[start,...goals];
+  for(const [l,t,r,b] of rects) for(const x of [l-.02,r+.02]) for(const z of [t-.02,b+.02])
+    if(pointFree(rects,x,z)) nodes.push({x,z});
+  const dist=nodes.map(()=>Infinity), prev=nodes.map(()=>-1), seen=new Set(); dist[0]=0;
+  while(seen.size<nodes.length) {
+    let at=-1;
+    for(let i=0;i<nodes.length;i++) if(!seen.has(i) && (at<0 || dist[i]<dist[at])) at=i;
+    if(at<0 || !Number.isFinite(dist[at])) return null;
+    if(at>0 && at<=goals.length) {
+      const path=[]; while(at>0) { path.unshift([nodes[at].x,nodes[at].z]); at=prev[at]; } return path;
+    }
+    seen.add(at);
+    for(let i=1;i<nodes.length;i++) {
+      if(seen.has(i)) continue;
+      const cost=dist[at]+Math.hypot(nodes[i].x-nodes[at].x,nodes[i].z-nodes[at].z);
+      if(cost<dist[i] && clearSegment(rects,nodes[at],nodes[i])) {dist[i]=cost;prev[i]=at;}
+    }
+  }
+  return null;
 }
 export function walkable(w, x, z) {
   if (
@@ -375,6 +429,22 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     source[cmd.resource] -= cmd.amount;
     dest[cmd.resource] += cmd.amount;
     message = `Đã ${cmd.direction === "deposit" ? "cất" : "lấy"} ${cmd.amount} ${{ wood: "gỗ", stone: "đá", food: "khẩu phần" }[cmd.resource]}.`;
+  } else if (cmd.type === "glide") {
+    requireThat(Array.isArray(cmd.steps) && cmd.steps.length > 0 && cmd.steps.length <= 64, "Đoạn đường không hợp lệ.");
+    let from = p; const lengths=[];
+    for(const step of cmd.steps) {
+      requireThat(step && typeof step.x === "number" && typeof step.z === "number", "Tọa độ không hợp lệ.");
+      const distance=Math.hypot(step.x-from.x,step.z-from.z);
+      requireThat(distance>0 && distance<=.4 && freeSegment(w,from,step), "Đường đi đã bị chặn.");
+      lengths.push(distance); from=step;
+    }
+    let budget=Math.min(4000,Math.max(0,now-(p.lastMove || now-50))) / 1000 * MOVE_SPEED, count=0;
+    while(count<lengths.length && lengths[count]<=budget+1e-8) budget-=lengths[count++];
+    if(count) {
+      p.x=cmd.steps[count-1].x; p.z=cmd.steps[count-1].z;
+      p.lastMove=now-Math.max(0,budget)/MOVE_SPEED*1000;
+      p.moveSeq=(p.moveSeq||0)+count;
+    }
   } else if (cmd.type === "walk") {
     requireThat(
       Array.isArray(cmd.steps) && cmd.steps.length > 0 && cmd.steps.length <= 8,

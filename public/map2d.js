@@ -18,6 +18,9 @@ export class Map2D {
     this.art = new Image();
     this.art.src = "/world-sprites.png";
     this.art.onload = () => {
+      const mask=document.createElement("canvas"); mask.width=this.art.naturalWidth; mask.height=this.art.naturalHeight;
+      const context=mask.getContext("2d",{willReadFrequently:true}); context.drawImage(this.art,0,0);
+      this.artPixels=context.getImageData(0,0,mask.width,mask.height);
       if (this.state)
         this.draw(this.state, this.selected, this.angle, this.preview);
     };
@@ -30,19 +33,20 @@ export class Map2D {
         .slice()
         .reverse()
         .find(
-          (t) => px >= t.left && px <= t.right && py >= t.top && py <= t.bottom,
+          (t) => {
+            if(px<t.left || px>t.right || py<t.top || py>t.bottom) return false;
+            if(!this.artPixels) return true;
+            const ix=Math.floor(t.sx+(px-t.drawX)/t.size*t.sw), iz=Math.floor(t.sy+(py-t.drawY)/t.size*t.sh);
+            return (this.artPixels.data[(iz*this.artPixels.width+ix)*4+3] || 0)>40;
+          },
         );
       if (hit) {
         choose(hit.id);
         return;
       }
-      const close = this.targets
-        .map((t) => ({ ...t, d: Math.hypot(t.px - px, t.py - py) }))
-        .sort((a, b) => a.d - b.d)[0];
-      if (close && close.d < Math.max(18, this.tile * 1.8)) {
-        choose(close.id);
-        return;
-      }
+      const groundTarget=this.targets.find(t => !(this.hitRects || []).some(r=>r.id===t.id) &&
+        Math.hypot((px-t.px)/this.tile,(py-t.py)/(this.tile*.5))<.8);
+      if(groundTarget) {choose(groundTarget.id);return;}
       const a = (px - this.w * 0.53) / this.tile,
         b = (py - this.h * 0.51) / (this.tile * 0.5);
       const rx = (a + b) / 2,
@@ -50,8 +54,8 @@ export class Map2D {
       const c = Math.cos(this.angle),
         s = Math.sin(this.angle);
       travel({
-        x: Math.round(rx * c + rz * s + this.cx),
-        z: Math.round(-rx * s + rz * c + this.cz),
+        x: rx * c + rz * s + this.cx,
+        z: -rx * s + rz * c + this.cz,
       });
     });
   }
@@ -200,6 +204,10 @@ export class Map2D {
         preview.valid ? "#c3df8b" : "#e19982",
         0.05,
       );
+    if (this.destination) {
+      const [dx,dy]=this.project(this.destination.x,this.destination.z);
+      c.strokeStyle="#ffe4a1";c.lineWidth=2;c.beginPath();c.ellipse(dx,dy,this.tile*.28,this.tile*.14,0,0,Math.PI*2);c.stroke();
+    }
     if (this.route?.length) {
       c.strokeStyle = "#f5d79488";
       c.lineWidth = 3;
@@ -271,7 +279,7 @@ export class Map2D {
           size,
         );
         this.hitRects.push({
-          id: o.id,
+          id: o.id, sx: col*sw, sy: row*sh, sw, sh, size, drawX:x-size*.5, drawY:y-size*.93,
           left: x - size * 0.38,
           right: x + size * 0.38,
           top: y - size * 0.85,

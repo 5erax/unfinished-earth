@@ -20,6 +20,11 @@ export class Motion {
     this.route.push({ x, z });
     return true;
   }
+  enqueueContinuous(world, x, z, freeSegment) {
+    const p=this.target(world.you,world.players[world.you],world.you);
+    if(this.pending.length>=240 || Math.hypot(x-p.x,z-p.z)<1e-8 || !freeSegment(world,p,{x,z})) return false;
+    this.pending.push({x,z}); this.route.push({x,z}); return true;
+  }
   acknowledge(ok, count = 1) {
     if (ok) this.pending.splice(0, count);
     else {
@@ -47,7 +52,7 @@ export class Motion {
       }
       const distance = Math.hypot(target.x - v.x, target.z - v.z);
       if (distance > 0.001) {
-        const factor = Math.min(1, (Math.max(0, dt) * 7) / distance);
+        const factor = Math.min(1, (Math.max(0, dt) * (this.continuous ? 5 : 7)) / distance);
         v.x += (target.x - v.x) * factor;
         v.z += (target.z - v.z) * factor;
         moving = true;

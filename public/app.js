@@ -11,12 +11,14 @@ const journal = new CommandJournal({
 let recovering = false;
 import { Motion } from "/motion.js";
 const motion = new Motion();
+motion.continuous = true;
 let sendingMove = false,
   nextMoveAt = 0;
 const held = new Map();
 import {
   BUILDINGS,
   CLASSES,
+  freeSegment, findRoute, MOVE_SPEED,
   placementProblem,
   housingCapacity,
   walkable as mapWalkable,
@@ -166,7 +168,7 @@ async function command(cmd) {
     busy ||
     recovering ||
     !state ||
-    (!["move", "walk"].includes(cmd.type) && motion.pending.length)
+    (!["move", "walk", "glide"].includes(cmd.type) && motion.pending.length)
   )
     return false;
   if (hasPending()) {
@@ -301,42 +303,13 @@ function canWalk(x, z) {
 
 function travel(destination, radius = 2) {
   if (!state || !online || recovering || (!busy && hasPending())) return;
-  path = [];
-  const p = motion.target(state.you, state.players[state.you], state.you),
-    queue = [[p.x, p.z]],
-    prev = new Map([[`${p.x},${p.z}`, null]]);
-  let found;
-  for (let i = 0; i < queue.length; i++) {
-    const [x, z] = queue[i];
-    if (Math.hypot(x - destination.x, z - destination.z) <= radius) {
-      found = [x, z];
-      break;
-    }
-    for (const [dx, dz] of [
-      [0, -1],
-      [1, 0],
-      [0, 1],
-      [-1, 0],
-    ]) {
-      const nx = x + dx,
-        nz = z + dz,
-        key = `${nx},${nz}`;
-      if (canWalk(nx, nz) && !prev.has(key)) {
-        prev.set(key, [x, z]);
-        queue.push([nx, nz]);
-      }
-    }
-  }
-  if (!found) {
-    toast("Không có đường đến đây. Cần sửa cầu trước.");
-    return;
-  }
-  let cursor = found;
-  while (prev.get(cursor.join(","))) {
-    path.unshift(cursor);
-    cursor = prev.get(cursor.join(","));
-  }
-  if (!path.length) toast("Bạn đã ở gần địa điểm.");
+  queuedAction = null;
+  const p = motion.target(state.you, state.players[state.you], state.you);
+  const route = findRoute(state,p,destination,radius);
+  path = route || [];
+  if (fallback) fallback.destination = route?.length ? { x:route.at(-1)[0], z:route.at(-1)[1] } : null;
+  if (!route) { toast("Không có đường tới điểm này. Hãy chọn đất trống hoặc kiểm tra cầu và vật cản."); return false; }
+  return true;
 }
 $("travel").onclick = () => {
   const t = target();
@@ -352,10 +325,10 @@ async function sendMoves() {
   )
     return;
   sendingMove = true;
-  const steps = motion.pending.slice(0, 8);
+  const steps = motion.pending.slice(0, 64);
   const before = state.players[state.you].moveSeq || 0,
     sent = performance.now();
-  const ok = await command({ type: "walk", steps });
+  const ok = await command({ type: "glide", steps });
   const accepted = Math.max(
     0,
     Math.min(steps.length, (state.players[state.you].moveSeq || 0) - before),
@@ -371,12 +344,19 @@ async function sendMoves() {
   nextMoveAt = sent + 180;
   sendingMove = false;
 }
-function move(dx, dz) {
-  queuedAction = null;
-  if (!state || !online || recovering || (!busy && hasPending())) return;
-  path = [];
+function move(dx, dz, dt) {
+  queuedAction = null; path = [];
+  if (fallback) fallback.destination = null;
   const p = motion.target(state.you, state.players[state.you], state.you);
-  if (motion.enqueue(state, p.x + dx, p.z + dz, mapWalkable)) sendMoves();
+  const length = Math.hypot(dx,dz); if(!length) return;
+  dx/=length; dz/=length;
+  const c=Math.cos(angle), s=Math.sin(angle);
+  const x=((c-s)*dx+(c+s)*dz)/Math.SQRT2*MOVE_SPEED*dt;
+  const z=((-s-c)*dx+(c-s)*dz)/Math.SQRT2*MOVE_SPEED*dt;
+  if(!motion.enqueueContinuous(state,p.x+x,p.z+z,freeSegment)) {
+    // Slide along a bank/wall without stepping through it.
+    if(!motion.enqueueContinuous(state,p.x+x,p.z,freeSegment)) motion.enqueueContinuous(state,p.x,p.z+z,freeSegment);
+  }
 }
 const directions = {
   w: [0, -1],
@@ -405,7 +385,7 @@ window.addEventListener("keydown", (e) => {
   e.preventDefault();
   if (!held.has(key)) {
     held.set(key, directions[key]);
-    move(...directions[key]);
+    path = []; queuedAction = null;
     lastStep = performance.now();
   }
 });
@@ -423,7 +403,7 @@ for (const b of document.querySelectorAll("[data-move]")) {
     b.setPointerCapture(e.pointerId);
     const d = b.dataset.move.split(",").map(Number);
     held.set("pointer", d);
-    move(...d);
+    path = []; queuedAction = null;
     lastStep = performance.now();
   };
   b.onpointerup =
@@ -442,17 +422,18 @@ pathTimer = setInterval(() => {
     held.clear();
     return;
   }
-  const now = performance.now();
-  if (now - lastStep >= 180) {
-    if (held.size) {
-      move(...[...held.values()].at(-1));
-      lastStep = now;
-    } else if (path.length && motion.pending.length < 8) {
-      const [x, z] = path[0];
-      if (motion.enqueue(state, x, z, mapWalkable)) path.shift();
-      else path = [];
-      lastStep = now;
-    }
+  const now = performance.now(), dt=Math.min(.05,Math.max(0,(now-lastStep)/1000));
+  lastStep=now;
+  if (held.size) {
+    const input=[...held.values()].reduce((a,b)=>[a[0]+b[0],a[1]+b[1]],[0,0]);
+    move(input[0],input[1],dt);
+  } else if (path.length && motion.pending.length < 240) {
+    const p=motion.target(state.you,state.players[state.you],state.you), [x,z]=path[0];
+    const distance=Math.hypot(x-p.x,z-p.z), fraction=Math.min(1,MOVE_SPEED*dt/distance);
+    if(distance<1e-6) path.shift();
+    else if(motion.enqueueContinuous(state,p.x+(x-p.x)*fraction,p.z+(z-p.z)*fraction,freeSegment)) {
+      if(fraction===1) path.shift();
+    } else { path=[]; queuedAction=null; toast("Đường đi đã thay đổi. Hãy chọn lại điểm đến."); }
   }
   sendMoves();
   if (
@@ -479,7 +460,7 @@ function choosePlot(t) {
   renderWorld();
 }
 function mapTravel(t) {
-  if ($("construction").open) choosePlot(t);
+  if ($("construction").open) choosePlot({x:Math.round(t.x),z:Math.round(t.z)});
   else travel(t, 0);
 }
 function plotPreview() {
@@ -667,7 +648,7 @@ function commitActions() {
         destination &&
         Math.hypot(p.x - destination.x, p.z - destination.z) > 2.5
       ) {
-        travel(destination);
+        if (!travel(destination)) return;
         queuedAction = { cmd, destination };
         toast("Đang đến gần để thực hiện thao tác…");
         return;
@@ -1207,7 +1188,7 @@ container.addEventListener("click", (e) => {
   const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
     v = new THREE.Vector3();
   if (raycaster.ray.intersectPlane(ground, v))
-    mapTravel({ x: Math.round(v.x), z: Math.round(v.z) });
+    mapTravel({ x: v.x, z: v.z });
 });
 new ResizeObserver(resize).observe(container);
 resize();
