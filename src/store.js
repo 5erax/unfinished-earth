@@ -17,7 +17,7 @@ export class Store {
       );
     if (!row) this.save(this.world);
   }
-  save(world, command) {
+  save(world, command, session) {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db
@@ -29,6 +29,10 @@ export class Store {
         this.db
           .prepare("INSERT INTO commands(player,id,result) VALUES(?,?,?)")
           .run(command.player, command.id, JSON.stringify(command.result));
+      if (session)
+        this.db
+          .prepare("INSERT INTO sessions(token,player,expires) VALUES(?,?,?)")
+          .run(session.token, session.player, session.expires);
       this.db.exec("COMMIT");
       this.world = world;
     } catch (error) {
