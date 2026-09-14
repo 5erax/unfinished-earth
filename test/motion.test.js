@@ -2,6 +2,23 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Motion } from "../public/motion.js";
 const world = () => ({ you: "a", players: { a: { x: 7, z: 22 } } });
+test("continuous display follows the same corner route at 30 and 60 fps", () => {
+  const run = fps => {
+    const w = world(), m = new Motion();
+    m.continuous = true;
+    m.frame(w, 0);
+    for (let i=1; i<=10; i++) m.enqueueContinuous(w, 7+i*.05, 22, () => true);
+    for (let i=1; i<=30; i++) m.enqueueContinuous(w, 7.5, 22+i*.05, () => true);
+    let visual;
+    for (let i=0; i<fps/5; i++) visual=m.frame(w, 1/fps).players.a;
+    assert.ok(Math.abs(visual.x-7.5)<1e-8);
+    assert.ok(Math.abs(visual.z-22.5)<1e-8);
+    assert.equal(w.players.a.x, 7);
+    return visual;
+  };
+  const a=run(30), b=run(60);
+  assert.ok(Math.hypot(a.x-b.x,a.z-b.z)<1e-8);
+});
 test("prediction responds before acknowledgement without modifying authoritative position", () => {
   const w = world(),
     m = new Motion();

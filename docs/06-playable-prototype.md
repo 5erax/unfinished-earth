@@ -6,13 +6,13 @@ Kiểm chứng chuỗi nhỏ có thể thao tác: lấy vật liệu → sửa c
 
 | Hệ thống | Đã triển khai | Chưa nghiệm thu / còn thiếu |
 | --- | --- | --- |
-| Client | Three.js trực giao, xoay 90°, nhân vật, click chọn vật thể, WASD, tìm đường và bảng tương tác tiếng Việt | Đã kiểm tra desktop bằng bản đồ 2D tương thích; trình duyệt kiểm tra thiếu WebGL nên chưa xác minh hình ảnh 3D/FPS |
-| Vùng | Lưới 32 × 32 đại diện 512 × 512 m, hai làng, một ruin | Bước di chuyển theo ô là abstraction của greybox; chưa đạt vận tốc, va chạm và navmesh của thiết kế |
+| Client | Canvas 2D nhìn từ trên xuống, đồ họa pixel, thu phóng/kéo bản đồ, về nhân vật, bật/tắt nhãn, click chọn vật thể, WASD/phím mũi tên, tìm đường và bảng tương tác tiếng Việt | Chưa có benchmark FPS, nghiệm thu đầy đủ trên thiết bị di động hoặc playtest nhiều người |
+| Vùng | Lưới địa hình 32 × 32 đại diện 512 × 512 m, hai làng, một ruin; nhân vật di chuyển liên tục với tọa độ lẻ, kiểm tra đường đi và tốc độ trên máy chủ | Va chạm dùng hình học đơn giản của ô địa hình/công trình; chưa đạt navmesh và vận tốc theo đơn vị thực của thiết kế |
 | Xây dựng | Cầu cố định 8 gỗ/4 đá, cống cố định 4 gỗ/2 đá | Có đặt nhà nhỏ và kho cá nhân; chưa đủ 8 building definitions, nhà tùy chỉnh, condition/repair |
 | Hậu cần | Túi 40 đơn vị, kho chung, xe chở 8 khẩu phần trong hai ngày | Xe dùng tiến độ theo ngày, chưa pathfind vật lý; chưa có cầu hỏng giữa chuyến và cargo recovery |
 | Sinh thái | Cống → độ ẩm/cá → crop, cỏ, grazer/predator; chu kỳ nắng/mưa/hạn | Là chỉ số thử nghiệm, chưa ledger nước m³, lũ không gian, sinh vật có reservation/ID, LOD hoặc seed đa dạng |
 | NPC | 24 danh tính; ăn, đổi nghề khi thiếu ăn ba ngày và ruộng đủ ẩm; di cư khi có cầu và làng nhận còn dự trữ | Chưa housing capacity, cooldown đầy đủ, tuổi đời hoặc hành vi đi lại vật lý |
-| Save | SQLite WAL/FULL; snapshot và biên nhận commandId cùng transaction trước phản hồi; session giữ qua restart | Chưa SIGKILL/power-loss drill, migration, rollback, compaction hoặc sổ giao dịch đầy đủ theo thiết kế |
+| Save | SQLite WAL/FULL; snapshot và biên nhận commandId cùng transaction trước phản hồi; tạo nhân vật và session cùng transaction; đã có kiểm thử crash tiến trình Node | Chưa thử mất điện/host DB, migration, rollback, compaction hoặc sổ giao dịch đầy đủ theo thiết kế |
 | Co-op | Cùng một world trên một server; cookie phiên, polling hai giây; giới hạn 8 kết nối gần nhất | Đã kiểm thử hai phiên tranh item qua HTTP; chưa playtest 1–4 người, stress 8 AOI, WebSocket hay network budget |
 | Offline | Một deadline 72 giờ từ đầu vắng; xe ngừng khi hết tín dụng 8 giờ; reconnect không tự cộng tín dụng | Credit tiêu theo lát thời gian đến cuối ngày; chưa production theo giây, equivalence toàn ledger hay mọi edge case T07–T11 |
 | Chronicle | Event có ID/ngày/địa điểm/causeIds; tồn tại qua save; client xem 60 gần nhất và tra nguyên nhân cũ | Chưa quyền biết, evidence certainty hoặc lịch sử truy vấn/phân trang đầy đủ |
@@ -42,6 +42,20 @@ Mở `http://127.0.0.1:3000`. Máy chủ mặc định chỉ bind loopback. `npm
 
 Máy chủ không tự đọc `.env` khi chạy `npm start`; shell dùng biến môi trường, hoặc `node --env-file=.env src/server.js`. Docker Compose đọc `.env` trực tiếp. Không thay SIM_SPEED giữa một phép đối chiếu online/offline.
 
+## Bản đồ và điều khiển
+
+Canvas 2D là renderer mặc định, không cần WebGL. Địa hình, cây, công trình và nhân vật dùng hình pixel vẽ bằng mã; định hướng màu sắc và khả năng đọc bản đồ được ghi ở [định hướng đồ họa](07-visual-direction.md). Đây là thay đổi cách thể hiện thế giới hiện có, không mở rộng quy mô mô phỏng.
+
+- **WASD/phím mũi tên:** di chuyển liên tục theo hướng trên màn hình, gồm hướng chéo.
+- **Cuộn chuột hoặc các nút +/−:** thu phóng bản đồ.
+- **Kéo bản đồ:** dịch góc nhìn; click vật thể để chọn và xem hành động.
+- **Toàn cảnh:** đưa góc nhìn về toàn bộ vùng; **về nhân vật:** đưa nhân vật vào giữa góc nhìn.
+- **Nhãn:** bật/tắt tên địa điểm để quan sát cảnh hoặc tìm mục tiêu.
+- **E:** thực hiện hành động tại mục tiêu đang chọn; hành động ở xa có thể tự dẫn nhân vật tới gần trước.
+- **Q/R với Thợ dựng:** gom vật liệu/tập trung khi kỹ năng đã hồi.
+
+Kéo hoặc thu phóng chỉ thay đổi góc nhìn. Hành động gameplay vẫn phải được máy chủ xác nhận; các mục địa điểm và bảng tương tác vẫn dùng được để chọn mục tiêu.
+
 ## Chuỗi chơi đầu tiên
 
 1. Vào thung lũng. Chọn **Gỗ gần nhà** → **Đi đến địa điểm** → thu thập ít nhất 8 gỗ.
@@ -59,6 +73,8 @@ Không có nút reset thế giới. Save thuộc máy chủ; xóa cookie làm m�
 Một tiến trình Node là một world actor: không có `await` giữa kiểm tra, thay đổi state và COMMIT của giao dịch. Các lệnh hợp lệ chỉ nhận `type`, tham số hành động và `commandId`; máy chủ không nhận inventory/state từ client. Gửi lại cùng ID của cùng người chơi trả lại biên nhận cũ, cả khi lần đầu bị từ chối. Client thử lại một lần bằng cùng ID khi lỗi mạng.
 
 World snapshot và receipt cùng nằm trong một transaction SQLite. `synchronous=FULL` phụ thuộc sự bảo đảm fsync của filesystem/host. Kiểm thử reopen không thay cho phép thử mất điện. Một ổ dữ liệu chỉ dùng bởi **một instance** server. Không chạy nhiều replica với snapshot trong RAM.
+
+Khi tạo phiên trên Node, nhân vật và session được lưu cùng transaction trước khi cấp cookie. Lỗi ghi session phải rollback cả snapshot; client không nhận cookie của một phiên chưa lưu. Có kiểm thử lỗi ghi rồi thử lại và mở lại SQLite. Architecture spike PostgreSQL có [kiểm thử chết tiến trình trước/sau COMMIT](07-process-death-durability.md) riêng; kết quả của spike không thay thế kiểm tra mất điện hoặc độ bền D1 thật.
 
 Tín dụng hoạt động tính theo khoảng cách giữa lệnh hợp lệ toàn nhóm, tối đa 5 giây mỗi khoảng; khoảng dài hơn 5 giây không cộng. Heartbeat/reconnect không cộng. Đây là xấp xỉ hoạt động, chưa chống AFK tự động hoàn chỉnh. Mô phỏng vùng vẫn phát triển tối đa 72 giờ thực khi vắng, xe vận hành chỉ khi còn tín dụng. Nhà/túi người chơi không bị hỏng hay mất do logout ở mô hình này.
 
@@ -92,13 +108,15 @@ Có công cụ sao lưu nhất quán khi SQLite đang chạy và kiểm tra/khô
 - HTTP: cookie, command retry trước/sau restart, không lộ túi người khác, chặn cross-origin POST.
 - Luồng hoàn chỉnh qua HTTP từ túi rỗng: thu thập → sửa → qua cầu → giao → mở cống → thu hoạch.
 
-**Đã bổ sung QA staging:** bản đồ 2D tương thích trên desktop, thu thập gỗ/đá, tự đi đến địa điểm, sửa cầu, qua sông, giao thức ăn và mở cống đã thao tác qua trình duyệt preview. Tải lại trang và khởi động lại preview vẫn giữ nhân vật/vật liệu. Trình duyệt kiểm tra không có WebGL; chế độ 3D, FPS/mobile, crash ngay sau ACK, Docker runtime và stress tám người vẫn chưa nghiệm thu.
+**QA staging trước đợt thay đồ họa:** bản đồ 2D tương thích trên desktop, thu thập gỗ/đá, tự đi đến địa điểm, sửa cầu, qua sông, giao thức ăn và mở cống đã thao tác qua trình duyệt preview. Tải lại trang và khởi động lại preview vẫn giữ nhân vật/vật liệu. Renderer pixel mới thay thế cả bản 3D và bản đồ tương thích cũ; kết quả QA cũ không phải benchmark của renderer mới. FPS/mobile, Docker runtime và stress tám người vẫn chưa nghiệm thu. Kiểm tra crash Node sau commit được mô tả riêng ở phần khôi phục thao tác bên dưới.
 
 ## Khoảng cách tới MVP
 
+**QA local ngày 14/09/2026:** đã kiểm tra renderer pixel trong trình duyệt ở bố cục desktop và chiều rộng 390 px: chọn làng bằng mái nhà, thu thập gỗ, di chuyển bằng bàn phím, zoom, kéo bản đồ, về nhân vật và bật/tắt nhãn. Tải lại trang vẫn giữ vật liệu; không ghi nhận lỗi JavaScript trong lượt thử này. Kiểm thử tự động bổ sung kiểm tra phép đổi tọa độ, điểm neo zoom và chọn sprite/ô xây dựng. Đây là kiểm tra chức năng, chưa phải đo FPS hay nghiệm thu mobile đầy đủ.
+
 | Thứ tự | Công việc tiếp theo | Điều kiện hoàn thành |
 | --- | --- | --- |
-| P0 | Playtest trực quan desktop trên host chạy được | Hoàn thành luồng chơi bằng giao diện; không lỗi WebGL, clip UI hoặc điều khiển |
+| P0 | Playtest trực quan desktop trên host chạy được | Hoàn thành luồng chơi bằng giao diện; địa hình/trạng thái dễ đọc, không clip UI hoặc lỗi điều khiển |
 | P0 | Save hardening và restore drill | Crash sau ACK, migration/rollback và replay không mất/nhân đồ; compaction có giới hạn |
 | P0 | Nước và offline có đơn vị chuẩn | Ledger m³, tín dụng theo giây và online/catch-up đáp ứng tolerance phụ lục C |
 | P1 | Co-op transport và quyền nhóm | 1–4 người chơi thật, rồi tám AOI đạt tick/bandwidth gate; quản lý session/thành viên |
@@ -116,7 +134,7 @@ D1 batch commit snapshot + receipt trong một transaction. Revision compare-and
 
 Worker không giữ bộ đếm thời gian trong RAM: mỗi request cập nhật bù từ save; sau heartbeat cuối 15 giây chuyển sang trạng thái vắng. Deadline 72 giờ được giữ qua cold start. Giới hạn 100 nhân vật cho staging; chưa có UI thu hồi phiên hoặc compaction dài hạn. Bản kiểm thử có 21 tests, bao gồm hai session độc lập, tranh tài nguyên, receipt race, CAS retry và reopen DB bằng runtime adapter. Đây chưa phải đo tải D1 thực hoặc playtest hai người thật qua hai trình duyệt.
 
-Giao diện tự dùng bản đồ Canvas 2D khi WebGL không có. Các nút hành động giữ DOM ổn định qua heartbeat; mã lệnh dùng Web Crypto getRandomValues để hoạt động cả trong preview HTTP.
+Giao diện dùng chung renderer pixel Canvas 2D với bản Node local. Các nút hành động giữ DOM ổn định qua heartbeat; mã lệnh dùng Web Crypto getRandomValues để hoạt động cả trong preview HTTP.
 
 ### Xây nhà và kho
 
@@ -142,18 +160,22 @@ mkdir -p data/restored
 node scripts/world-backup.mjs restore backups/world-2026-09-13.sqlite data/restored/world.sqlite
 ```
 
-Công cụ dùng SQLite VACUUM INTO để lấy snapshot nhất quán, gồm cả thay đổi đã commit trong WAL. Bản sao chứa toàn bộ bảng thế giới, phiên đăng nhập và biên nhận lệnh; không chỉ JSON gameplay. Công cụ kiểm tra integrity, phiên bản, tồn kho, danh tính và liên kết session/receipt trước khi công bố tệp. Báo cáo in số lượng và SHA-256, không in session token. Tệp có quyền 0600; lưu bản sao ở nơi riêng tư và chuyển thêm một bản sang thiết bị/ổ lưu trữ độc lập.
+Công cụ dùng SQLite VACUUM INTO để lấy snapshot nhất quán, gồm cả thay đổi đã commit trong WAL. Bản sao chứa toàn bộ bảng thế giới, phiên đăng nhập và biên nhận lệnh; không chỉ JSON gameplay. Công cụ kiểm tra integrity, phiên bản, tồn kho, danh tính và liên kết session/receipt trước khi công bố tệp. Báo cáo in số lượng và SHA-256, không in session token. Trên POSIX, tệp có quyền 0600; trên Windows, tệp kế thừa ACL của thư mục đích. Lưu bản sao ở thư mục riêng tư và chuyển thêm một bản sang thiết bị/ổ lưu trữ độc lập. Nội dung tệp được flush trước khi công bố; bước fsync thư mục bổ sung chỉ chạy trên POSIX vì Node không hỗ trợ thao tác này trên Windows.
 
 `restore` luôn tạo tệp mới, từ chối ghi đè tệp có sẵn hoặc khôi phục vào nguồn. Sau khi kiểm tra bản sao, dừng máy chủ cũ rồi chạy `DATA_DIR=data/restored npm start` để dùng bản khôi phục. Giữ cả dữ liệu cũ cho tới khi đã xác minh nhân vật, kho và lịch sử trên bản khôi phục. Chạy máy chủ cũ và bản khôi phục cùng lúc sẽ tạo hai thế giới độc lập; không có cơ chế hợp nhất tự động.
 
-Hỗ trợ Node/SQLite và SQLite của adapter D1 cục bộ. Không kết nối database D1 cloud, PostgreSQL hoặc sao lưu dữ liệu cloud thật. Công cụ không thay thế migration/rollback và chưa có lịch sao lưu tự động. Ba kiểm thử restore mới bao phủ WAL đang mở, session/receipt, snapshot D1 cục bộ, từ chối ghi đè và save không hợp lệ. Tổng cộng 31 kiểm thử game.
+Hỗ trợ Node/SQLite và SQLite của adapter D1 cục bộ. Không kết nối database D1 cloud, PostgreSQL hoặc sao lưu dữ liệu cloud thật. Công cụ không thay thế migration/rollback và chưa có lịch sao lưu tự động. Ba kiểm thử restore mới bao phủ WAL đang mở, session/receipt, snapshot D1 cục bộ, từ chối ghi đè và save không hợp lệ. Chạy bộ kiểm thử prototype bằng `npm test`.
 
-### Quality update — trải nghiệm chơi
+### Trải nghiệm chơi và di chuyển liên tục
 
-Góc nhìn mặc định là bản đồ đẳng cự minh họa, với sprite cây/đá/nhà/kho mới, camera theo nhân vật và nút toàn cảnh. Có thể chuyển sang 3D nếu thiết bị hỗ trợ WebGL. Giao diện ưu tiên thế giới: nhiệm vụ gọn bên trái, bảng thao tác chỉ mở khi chọn, lịch sử mặc định thu gọn. Mục tiêu chuyển theo vật liệu/cầu/lương thực/cống, dẫn tới nguồn tài nguyên gần nhất và báo khi kho hết hàng. Chọn thao tác ở xa sẽ tự đi tới rồi thực hiện; E thao tác tại điểm đang chọn.
+Renderer pixel Canvas 2D nhìn từ trên xuống thay thế bản đẳng cự và tùy chọn 3D trước đây. Giao diện ưu tiên bản đồ; hướng dẫn mục tiêu chuyển theo vật liệu/cầu/lương thực/cống, dẫn tới nguồn tài nguyên gần nhất và báo khi kho hết hàng. Chọn thao tác ở xa sẽ tự đi tới rồi thực hiện; E thao tác tại điểm đang chọn. Thu phóng, kéo bản đồ, toàn cảnh, về nhân vật và bật/tắt nhãn vẫn dùng được.
 
-Client gửi đoạn đường tối đa tám bước, máy chủ xác thực toàn bộ đường rồi xác nhận phần đủ ngân sách thời gian (160 ms/bước, tích lũy tối đa 1.28 giây). Client vẫn phản hồi bằng dự đoán và đối chiếu số bước đã xác nhận; biên nhận retry giữ nguyên. Bỏ thời gian chờ 165 ms sau mỗi ACK. Kiểm thử chu kỳ truyền 650 ms xác nhận bốn bước mỗi gói; đây là mô phỏng độ trễ, không phải đo latency từ máy người dùng.
+Client dự đoán chuyển động liên tục và gửi đoạn đường gồm các điểm tọa độ lẻ. Máy chủ kiểm tra toàn bộ đoạn, giới hạn tốc độ theo thời gian đã trôi qua, rồi xác nhận phần đủ ngân sách; client đối chiếu số điểm đã xác nhận và giữ cơ chế retry bằng cùng mã lệnh. Đường đi tránh công trình và chỉ qua sông tại cầu đã sửa. Các lệnh di chuyển theo ô cũ vẫn được giữ để tương thích, nhưng không mô tả điều khiển hiện tại. Kiểm thử có đường tới tọa độ lẻ, vật cản, chặn vượt sông và chu kỳ ACK giả lập 650 ms; đây chưa phải đo độ trễ mạng thực.
 
-Sprite `public/world-sprites.png` được tạo cho dự án bằng công cụ sinh ảnh, dùng trực tiếp cho các vật thể trong bản đồ 2D. Chưa có animation nhân vật hoàn chỉnh hoặc art 3D tương đương.
+Hình địa hình và vật thể của renderer hiện tại được vẽ bằng mã Canvas. `public/world-sprites.png` là bộ minh họa tạo cho giai đoạn trước; hình chọn nhân vật nằm ở `public/characters-v1.png`. Các tài sản này thuộc phạm vi minh họa prototype, chưa phải bộ animation nhân vật hay art MVP hoàn chỉnh. Xem [định hướng đồ họa](07-visual-direction.md).
 
-Kiểm tra giao diện desktop trên thế giới mới: vào game, thu thập 8 gỗ/4 đá, sửa cầu, lấy khẩu phần, tải lại giữ tiến độ; thêm kiểm tra chọn cây từ bản đồ và tự đi tới rồi thu thập. Phát hiện và sửa hướng dẫn tự bỏ chuyến giao khi xe NPC giao trước. 33 kiểm thử tự động đạt, có chuỗi HTTP qua sông/giao thức ăn/mở cống/thu hoạch. Chưa nghiệm thu WebGL, mobile hoặc độ trễ mạng trên máy người dùng; không coi số test là chứng nhận chất lượng hình ảnh.
+### Nhân vật và kỹ năng
+
+Người chơi mới đặt tên và chọn Thợ dựng, Người giữ nguồn, Người dẫn đường hoặc Người kết nối. Hồ sơ được máy chủ kiểm tra và lưu; nhân vật cũ vẫn mở được. Có thể đổi tên/nghề khi về gần nơi trú ẩn.
+
+Thợ dựng thu thập tối đa hai đá mỗi lần, luôn trừ đúng lượng lấy khỏi nguồn. **Q — Gom vật liệu** lấy tối đa sáu vật liệu từ nguồn còn hàng trong hai ô, giữ giới hạn túi 40 và hồi 30 giây. **R — Tập trung** giảm khoảng cách giữa lần thu thập xuống 0,25 giây trong 15 giây, hồi 60 giây. Ba nghề còn lại chơi được hoạt động chung; kỹ năng riêng đang phát triển. Kiểm thử bao phủ hồ sơ không hợp lệ, đổi nghề ở xa, bảo toàn vật liệu, túi đầy và thời gian hồi; chưa có hệ thống chiến đấu hoặc cân bằng đầy đủ giữa các nghề.

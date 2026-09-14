@@ -121,7 +121,8 @@ export function copyWorld(source, destination) {
     const sha256 = createHash("sha256")
       .update(readFileSync(temporary))
       .digest("hex");
-    const fd = openSync(temporary, "r");
+    // Windows FlushFileBuffers requires a writable file handle.
+    const fd = openSync(temporary, "r+");
     try {
       fsyncSync(fd);
     } finally {
@@ -129,11 +130,15 @@ export function copyWorld(source, destination) {
     }
     // Exclusive atomic publication: never replace an existing destination.
     linkSync(temporary, destination);
-    const directory = openSync(dirname(destination), "r");
-    try {
-      fsyncSync(directory);
-    } finally {
-      closeSync(directory);
+    // Node cannot open/fsync directory handles on Windows. File contents have
+    // already been flushed; POSIX additionally persists the directory entry.
+    if (process.platform !== "win32") {
+      const directory = openSync(dirname(destination), "r");
+      try {
+        fsyncSync(directory);
+      } finally {
+        closeSync(directory);
+      }
     }
     return { ...report, bytes: statSync(destination).size, sha256 };
   } finally {

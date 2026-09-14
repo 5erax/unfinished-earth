@@ -45,7 +45,10 @@ test("online WAL backup restores buildings, stock, sessions and dedupe receipts 
       assert.equal(report.buildings, 1);
       assert.equal(report.sessions, 1);
       assert.equal(report.receipts, 1);
-      assert.equal(statSync(backup).mode & 0o777, 0o600);
+      // Windows inherits directory ACLs instead of exposing POSIX mode bits.
+      if (process.platform !== "win32")
+        assert.equal(statSync(backup).mode & 0o777, 0o600);
+      assert.ok(statSync(backup).isFile());
       store.world.players.a.bag.wood = 1;
       store.save(store.world);
       copyWorld(backup, restored);
