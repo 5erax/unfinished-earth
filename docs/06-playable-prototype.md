@@ -6,8 +6,8 @@ Kiểm chứng chuỗi nhỏ có thể thao tác: lấy vật liệu → sửa c
 
 | Hệ thống | Đã triển khai | Chưa nghiệm thu / còn thiếu |
 | --- | --- | --- |
-| Client | Three.js trực giao, xoay 90°, nhân vật, click chọn vật thể, WASD, tìm đường và bảng tương tác tiếng Việt | Đã kiểm tra desktop bằng bản đồ 2D tương thích; trình duyệt kiểm tra thiếu WebGL nên chưa xác minh hình ảnh 3D/FPS |
-| Vùng | Lưới 32 × 32 đại diện 512 × 512 m, hai làng, một ruin | Bước di chuyển theo ô là abstraction của greybox; chưa đạt vận tốc, va chạm và navmesh của thiết kế |
+| Client | Canvas 2D nhìn từ trên xuống, đồ họa pixel, thu phóng/kéo bản đồ, về nhân vật, bật/tắt nhãn, click chọn vật thể, WASD/phím mũi tên, tìm đường và bảng tương tác tiếng Việt | Chưa có benchmark FPS, nghiệm thu đầy đủ trên thiết bị di động hoặc playtest nhiều người |
+| Vùng | Lưới 32 × 32 đại diện 512 × 512 m, hai làng, một ruin; hình ảnh bám theo ô và trạng thái mô phỏng | Bước di chuyển theo ô vẫn là mô hình đơn giản hóa; chưa đạt vận tốc, va chạm và navmesh của thiết kế |
 | Xây dựng | Cầu cố định 8 gỗ/4 đá, cống cố định 4 gỗ/2 đá | Có đặt nhà nhỏ và kho cá nhân; chưa đủ 8 building definitions, nhà tùy chỉnh, condition/repair |
 | Hậu cần | Túi 40 đơn vị, kho chung, xe chở 8 khẩu phần trong hai ngày | Xe dùng tiến độ theo ngày, chưa pathfind vật lý; chưa có cầu hỏng giữa chuyến và cargo recovery |
 | Sinh thái | Cống → độ ẩm/cá → crop, cỏ, grazer/predator; chu kỳ nắng/mưa/hạn | Là chỉ số thử nghiệm, chưa ledger nước m³, lũ không gian, sinh vật có reservation/ID, LOD hoặc seed đa dạng |
@@ -41,6 +41,18 @@ Mở `http://127.0.0.1:3000`. Máy chủ mặc định chỉ bind loopback. `npm
 | WORLD_ACCESS_CODE | rỗng trên loopback | Bắt buộc >=16 ký tự khi bind ra mạng |
 
 Máy chủ không tự đọc `.env` khi chạy `npm start`; shell dùng biến môi trường, hoặc `node --env-file=.env src/server.js`. Docker Compose đọc `.env` trực tiếp. Không thay SIM_SPEED giữa một phép đối chiếu online/offline.
+
+## Bản đồ và điều khiển
+
+Canvas 2D là renderer mặc định, không cần WebGL. Địa hình, cây, công trình và nhân vật dùng hình pixel vẽ bằng mã; định hướng màu sắc và khả năng đọc bản đồ được ghi ở [định hướng đồ họa](07-visual-direction.md). Đây là thay đổi cách thể hiện thế giới hiện có, không mở rộng quy mô mô phỏng.
+
+- **WASD/phím mũi tên:** di chuyển nhân vật theo hướng trên màn hình.
+- **Cuộn chuột hoặc các nút +/−:** thu phóng bản đồ.
+- **Kéo bản đồ:** dịch góc nhìn; click vật thể để chọn và xem hành động.
+- **Toàn cảnh:** đưa góc nhìn về toàn bộ vùng; **về nhân vật:** đưa nhân vật vào giữa góc nhìn.
+- **Nhãn:** bật/tắt tên địa điểm để quan sát cảnh hoặc tìm mục tiêu.
+
+Kéo hoặc thu phóng chỉ thay đổi góc nhìn. Hành động gameplay vẫn phải được máy chủ xác nhận; các mục địa điểm và bảng tương tác vẫn dùng được để chọn mục tiêu.
 
 ## Chuỗi chơi đầu tiên
 
@@ -92,13 +104,15 @@ Có công cụ sao lưu nhất quán khi SQLite đang chạy và kiểm tra/khô
 - HTTP: cookie, command retry trước/sau restart, không lộ túi người khác, chặn cross-origin POST.
 - Luồng hoàn chỉnh qua HTTP từ túi rỗng: thu thập → sửa → qua cầu → giao → mở cống → thu hoạch.
 
-**Đã bổ sung QA staging:** bản đồ 2D tương thích trên desktop, thu thập gỗ/đá, tự đi đến địa điểm, sửa cầu, qua sông, giao thức ăn và mở cống đã thao tác qua trình duyệt preview. Tải lại trang và khởi động lại preview vẫn giữ nhân vật/vật liệu. Trình duyệt kiểm tra không có WebGL; chế độ 3D, FPS/mobile, crash ngay sau ACK, Docker runtime và stress tám người vẫn chưa nghiệm thu.
+**QA staging trước đợt thay đồ họa:** bản đồ 2D tương thích trên desktop, thu thập gỗ/đá, tự đi đến địa điểm, sửa cầu, qua sông, giao thức ăn và mở cống đã thao tác qua trình duyệt preview. Tải lại trang và khởi động lại preview vẫn giữ nhân vật/vật liệu. Renderer pixel mới thay thế cả bản 3D và bản đồ tương thích cũ; kết quả QA cũ không phải benchmark của renderer mới. FPS/mobile, Docker runtime và stress tám người vẫn chưa nghiệm thu. Kiểm tra crash Node sau commit được mô tả riêng ở phần khôi phục thao tác bên dưới.
 
 ## Khoảng cách tới MVP
 
+**QA local ngày 14/09/2026:** đã kiểm tra renderer pixel trong trình duyệt ở bố cục desktop và chiều rộng 390 px: chọn làng bằng mái nhà, thu thập gỗ, di chuyển bằng bàn phím, zoom, kéo bản đồ, về nhân vật và bật/tắt nhãn. Tải lại trang vẫn giữ vật liệu; không ghi nhận lỗi JavaScript trong lượt thử này. Kiểm thử tự động bổ sung kiểm tra phép đổi tọa độ, điểm neo zoom và chọn sprite/ô xây dựng. Đây là kiểm tra chức năng, chưa phải đo FPS hay nghiệm thu mobile đầy đủ.
+
 | Thứ tự | Công việc tiếp theo | Điều kiện hoàn thành |
 | --- | --- | --- |
-| P0 | Playtest trực quan desktop trên host chạy được | Hoàn thành luồng chơi bằng giao diện; không lỗi WebGL, clip UI hoặc điều khiển |
+| P0 | Playtest trực quan desktop trên host chạy được | Hoàn thành luồng chơi bằng giao diện; địa hình/trạng thái dễ đọc, không clip UI hoặc lỗi điều khiển |
 | P0 | Save hardening và restore drill | Crash sau ACK, migration/rollback và replay không mất/nhân đồ; compaction có giới hạn |
 | P0 | Nước và offline có đơn vị chuẩn | Ledger m³, tín dụng theo giây và online/catch-up đáp ứng tolerance phụ lục C |
 | P1 | Co-op transport và quyền nhóm | 1–4 người chơi thật, rồi tám AOI đạt tick/bandwidth gate; quản lý session/thành viên |
@@ -116,7 +130,7 @@ D1 batch commit snapshot + receipt trong một transaction. Revision compare-and
 
 Worker không giữ bộ đếm thời gian trong RAM: mỗi request cập nhật bù từ save; sau heartbeat cuối 15 giây chuyển sang trạng thái vắng. Deadline 72 giờ được giữ qua cold start. Giới hạn 100 nhân vật cho staging; chưa có UI thu hồi phiên hoặc compaction dài hạn. Bản kiểm thử có 21 tests, bao gồm hai session độc lập, tranh tài nguyên, receipt race, CAS retry và reopen DB bằng runtime adapter. Đây chưa phải đo tải D1 thực hoặc playtest hai người thật qua hai trình duyệt.
 
-Giao diện tự dùng bản đồ Canvas 2D khi WebGL không có. Các nút hành động giữ DOM ổn định qua heartbeat; mã lệnh dùng Web Crypto getRandomValues để hoạt động cả trong preview HTTP.
+Giao diện dùng chung renderer pixel Canvas 2D với bản Node local. Các nút hành động giữ DOM ổn định qua heartbeat; mã lệnh dùng Web Crypto getRandomValues để hoạt động cả trong preview HTTP.
 
 ### Xây nhà và kho
 
@@ -142,8 +156,8 @@ mkdir -p data/restored
 node scripts/world-backup.mjs restore backups/world-2026-09-13.sqlite data/restored/world.sqlite
 ```
 
-Công cụ dùng SQLite VACUUM INTO để lấy snapshot nhất quán, gồm cả thay đổi đã commit trong WAL. Bản sao chứa toàn bộ bảng thế giới, phiên đăng nhập và biên nhận lệnh; không chỉ JSON gameplay. Công cụ kiểm tra integrity, phiên bản, tồn kho, danh tính và liên kết session/receipt trước khi công bố tệp. Báo cáo in số lượng và SHA-256, không in session token. Tệp có quyền 0600; lưu bản sao ở nơi riêng tư và chuyển thêm một bản sang thiết bị/ổ lưu trữ độc lập.
+Công cụ dùng SQLite VACUUM INTO để lấy snapshot nhất quán, gồm cả thay đổi đã commit trong WAL. Bản sao chứa toàn bộ bảng thế giới, phiên đăng nhập và biên nhận lệnh; không chỉ JSON gameplay. Công cụ kiểm tra integrity, phiên bản, tồn kho, danh tính và liên kết session/receipt trước khi công bố tệp. Báo cáo in số lượng và SHA-256, không in session token. Trên POSIX, tệp có quyền 0600; trên Windows, tệp kế thừa ACL của thư mục đích. Lưu bản sao ở thư mục riêng tư và chuyển thêm một bản sang thiết bị/ổ lưu trữ độc lập. Nội dung tệp được flush trước khi công bố; bước fsync thư mục bổ sung chỉ chạy trên POSIX vì Node không hỗ trợ thao tác này trên Windows.
 
 `restore` luôn tạo tệp mới, từ chối ghi đè tệp có sẵn hoặc khôi phục vào nguồn. Sau khi kiểm tra bản sao, dừng máy chủ cũ rồi chạy `DATA_DIR=data/restored npm start` để dùng bản khôi phục. Giữ cả dữ liệu cũ cho tới khi đã xác minh nhân vật, kho và lịch sử trên bản khôi phục. Chạy máy chủ cũ và bản khôi phục cùng lúc sẽ tạo hai thế giới độc lập; không có cơ chế hợp nhất tự động.
 
-Hỗ trợ Node/SQLite và SQLite của adapter D1 cục bộ. Không kết nối database D1 cloud, PostgreSQL hoặc sao lưu dữ liệu cloud thật. Công cụ không thay thế migration/rollback và chưa có lịch sao lưu tự động. Ba kiểm thử restore mới bao phủ WAL đang mở, session/receipt, snapshot D1 cục bộ, từ chối ghi đè và save không hợp lệ. Tổng cộng 31 kiểm thử game.
+Hỗ trợ Node/SQLite và SQLite của adapter D1 cục bộ. Không kết nối database D1 cloud, PostgreSQL hoặc sao lưu dữ liệu cloud thật. Công cụ không thay thế migration/rollback và chưa có lịch sao lưu tự động. Ba kiểm thử restore mới bao phủ WAL đang mở, session/receipt, snapshot D1 cục bộ, từ chối ghi đè và save không hợp lệ. Chạy bộ kiểm thử prototype bằng `npm test`.

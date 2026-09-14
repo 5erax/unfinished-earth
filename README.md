@@ -14,7 +14,7 @@ Game hướng đến chơi solo và co-op PvE trong các thế giới riêng, v�
 
 **Đã có prototype gameplay 0.1 trên nhánh này. Chưa đạt MVP đầy đủ và chưa có benchmark hiệu năng.**
 
-Prototype gồm một vùng 3D dạng greybox, thu thập, sửa cầu, cống tưới, cây trồng, nhà và kho đặt trên bản đồ, xe giao hàng, 24 NPC và Chronicle. Máy chủ Node.js quyết định trạng thái; SQLite lưu world và biên nhận lệnh. Xem [hướng dẫn chạy và giới hạn](docs/06-playable-prototype.md).
+Prototype gồm một vùng nhìn từ trên xuống bằng Canvas 2D, với đồ họa pixel, thu thập, sửa cầu, cống tưới, cây trồng, nhà và kho đặt trên bản đồ, xe giao hàng, 24 NPC và Chronicle. Máy chủ Node.js quyết định trạng thái; SQLite lưu world và biên nhận lệnh. Xem [hướng dẫn chạy và giới hạn](docs/06-playable-prototype.md) và [định hướng đồ họa](docs/07-visual-direction.md).
 
 ### Chạy thử
 
@@ -26,6 +26,8 @@ npm start
 ```
 
 Mở `http://127.0.0.1:3000`. Dùng danh sách địa điểm để đi đến nguồn gỗ/đá, thu thập **8 gỗ + 4 đá**, sửa cầu rồi lấy thức ăn từ kho và giao cho Làng Hạ. `npm test` chạy kiểm thử mô phỏng và API.
+
+Di chuyển bằng **WASD/phím mũi tên**; cuộn chuột hoặc dùng các nút **+/−** để thu phóng, kéo bản đồ để dịch góc nhìn. Cụm điều khiển bản đồ có nút xem toàn cảnh, về nhân vật và bật/tắt nhãn địa điểm. Đồ họa prototype không cần WebGL.
 
 Đồng hồ prototype mặc định **×30** (một ngày game = một phút thực). Đặt `SIM_SPEED=1` để dùng nhịp 30 phút/ngày của thiết kế. Dữ liệu nằm trong `data/world.sqlite`; giữ thư mục này qua lần chạy lại.
 

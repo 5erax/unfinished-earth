@@ -12,7 +12,7 @@
     "start": "node src/server.js",
     "dev": "node scripts/preview.mjs",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/server.js && node --check src/world.js && node --check public/app.js && node --check src/cloud-worker.js && node --check src/cloud-store.js",
+    "check": "node --check src/server.js && node --check src/world.js && node --check public/app.js && node --check public/map2d.js && node --check src/cloud-worker.js && node --check src/cloud-store.js",
     "build": "node scripts/build-cloud.mjs",
     "dev:node": "node --watch src/server.js",
     "dev:client": "pnpm --filter @unfinished-earth/client dev",

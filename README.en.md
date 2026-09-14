@@ -14,9 +14,11 @@ The working target is solo play and 1–8-player co-op PvE in private worlds. Co
 
 **Playable technical prototype 0.1 on this branch. The complete MVP and performance gates are not yet met.**
 
-Run with Node.js 24+: `npm ci`, then `npm start`, and open `http://127.0.0.1:3000`. The prototype includes orthographic 3D greybox movement, gathering, bridge repair, irrigation, harvests, logistics, 24 persistent named NPCs, causal events, and a SQLite-backed authoritative Node server.
+Run with Node.js 24+: `npm ci`, then `npm start`, and open `http://127.0.0.1:3000`. The prototype uses a top-down Canvas 2D pixel renderer and includes movement, gathering, bridge repair, irrigation, harvests, logistics, 24 persistent named NPCs, causal events, and a SQLite-backed authoritative Node server.
 
-The default prototype clock runs at ×30 (one real minute per game day); use `SIM_SPEED=1` for design timing. Save data lives in `data/world.sqlite`. Run `npm test` for simulation and HTTP integration checks. See [implementation, deployment and remaining gates](docs/06-playable-prototype.md). A Sites/Workers deployment adapter now uses durable D1 storage. Desktop browser QA verified the 2D compatibility map and core controls; WebGL rendering and multiplayer browser stress remain unverified.
+Move with **WASD/arrow keys**, zoom with the mouse wheel or the **+/− buttons**, and drag the map to pan. Map controls provide an overview, focus on the player, and place-label visibility. The prototype renderer does not require WebGL. See the [visual direction](docs/07-visual-direction.md) (Vietnamese).
+
+The default prototype clock runs at ×30 (one real minute per game day); use `SIM_SPEED=1` for design timing. Save data lives in `data/world.sqlite`. Run `npm test` for simulation and HTTP integration checks. See [implementation, deployment and remaining gates](docs/06-playable-prototype.md). A Sites/Workers deployment adapter uses durable D1 storage. Earlier desktop browser QA covered the compatibility map and core controls; performance benchmarks and multiplayer browser stress remain unverified.
 
 Game Design Bible v0.1 now covers 117 sections, 20 emergent scenarios, explicit system contracts, a bounded MVP, technical risks and validation criteria. Capacity, schedules and performance figures remain unvalidated design targets.
 
