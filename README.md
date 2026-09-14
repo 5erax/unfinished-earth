@@ -27,7 +27,7 @@ npm start
 
 Mở `http://127.0.0.1:3000`. Dùng danh sách địa điểm để đi đến nguồn gỗ/đá, thu thập **8 gỗ + 4 đá**, sửa cầu rồi lấy thức ăn từ kho và giao cho Làng Hạ. `npm test` chạy kiểm thử mô phỏng và API.
 
-Di chuyển bằng **WASD/phím mũi tên**; cuộn chuột hoặc dùng các nút **+/−** để thu phóng, kéo bản đồ để dịch góc nhìn. Cụm điều khiển bản đồ có nút xem toàn cảnh, về nhân vật và bật/tắt nhãn địa điểm. Đồ họa prototype không cần WebGL.
+Di chuyển liên tục bằng **WASD/phím mũi tên**; cuộn chuột hoặc dùng các nút **+/−** để thu phóng, kéo bản đồ để dịch góc nhìn. Cụm điều khiển bản đồ có nút xem toàn cảnh, về nhân vật và bật/tắt nhãn địa điểm. Đồ họa prototype không cần WebGL. Khi vào game, đặt tên và chọn nghề; Thợ dựng có kỹ năng gom vật liệu **Q** và tập trung **R**.
 
 Đồng hồ prototype mặc định **×30** (một ngày game = một phút thực). Đặt `SIM_SPEED=1` để dùng nhịp 30 phút/ngày của thiết kế. Dữ liệu nằm trong `data/world.sqlite`; giữ thư mục này qua lần chạy lại.
 

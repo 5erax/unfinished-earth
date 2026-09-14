@@ -24,9 +24,18 @@ export function view(w, id, now, speed) {
         {
           id: key,
           name: p.name,
+              classId: p.classId || null,
           x: p.x,
           z: p.z,
-          ...(key === id ? { bag: p.bag, discoveries: p.discoveries } : {}),
+          ...(key === id
+            ? {
+                bag: p.bag,
+                    cooldowns: p.cooldowns || {},
+                    focusUntil: p.focusUntil || 0,
+                discoveries: p.discoveries,
+                moveSeq: p.moveSeq || 0,
+              }
+            : {}),
         },
       ]),
   );
@@ -97,10 +106,17 @@ export function createWorker(assets = {}, clock = Date.now) {
           (req.method === "GET" || req.method === "HEAD") &&
           assets[url.pathname]
         ) {
-          const [content, type] = assets[url.pathname];
-          response = new Response(req.method === "HEAD" ? null : content, {
-            headers: { "Content-Type": type, "Cache-Control": "no-cache" },
-          });
+          const [content, type, binary] = assets[url.pathname];
+          response = new Response(
+            req.method === "HEAD"
+              ? null
+              : binary
+                ? Uint8Array.from(atob(content), (c) => c.charCodeAt(0))
+                : content,
+            {
+              headers: { "Content-Type": type, "Cache-Control": "no-cache" },
+            },
+          );
         } else if (req.method === "GET" && url.pathname === "/health") {
           // Verify durable storage, not merely that a Worker isolate started.
           await env.DB.prepare("SELECT 1 FROM cloud_worlds LIMIT 1").first();
@@ -149,7 +165,7 @@ export function createWorker(assets = {}, clock = Date.now) {
                     ),
                     { status: 409 },
                   );
-                join(w, id, now);
+                join(w, id, now, data.character);
                 return { status: 200, payload: {} };
               },
               {

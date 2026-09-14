@@ -16,7 +16,7 @@ The working target is solo play and 1–8-player co-op PvE in private worlds. Co
 
 Run with Node.js 24+: `npm ci`, then `npm start`, and open `http://127.0.0.1:3000`. The prototype uses a top-down Canvas 2D pixel renderer and includes movement, gathering, bridge repair, irrigation, harvests, logistics, 24 persistent named NPCs, causal events, and a SQLite-backed authoritative Node server.
 
-Move with **WASD/arrow keys**, zoom with the mouse wheel or the **+/− buttons**, and drag the map to pan. Map controls provide an overview, focus on the player, and place-label visibility. The prototype renderer does not require WebGL. See the [visual direction](docs/07-visual-direction.md) (Vietnamese).
+Move continuously with **WASD/arrow keys**, zoom with the mouse wheel or the **+/− buttons**, and drag the map to pan. Map controls provide an overview, focus on the player, and place-label visibility. The prototype renderer does not require WebGL. Choose a name and class when joining; the Builder has material collection (**Q**) and focus (**R**) skills. See the [visual direction](docs/07-visual-direction.md) (Vietnamese).
 
 The default prototype clock runs at ×30 (one real minute per game day); use `SIM_SPEED=1` for design timing. Save data lives in `data/world.sqlite`. Run `npm test` for simulation and HTTP integration checks. See [implementation, deployment and remaining gates](docs/06-playable-prototype.md). A Sites/Workers deployment adapter uses durable D1 storage. Earlier desktop browser QA covered the compatibility map and core controls; performance benchmarks and multiplayer browser stress remain unverified.
 

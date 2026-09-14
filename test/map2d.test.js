@@ -40,3 +40,12 @@ test("overlapping sprites select the frontmost visible target", () => {
   map.pick(...map.project(6, 7));
   assert.equal(chosen, "house");
 });
+test("empty-ground travel preserves continuous coordinates and rejects the sea", () => {
+  const map = camera(), walked = [];
+  map.travel = p => walked.push(p);
+  map.pick(...map.project(10.25, 20.75));
+  assert.deepEqual(walked, [{x:10.25,z:20.75}]);
+  map.pick(...map.project(.8, 20));
+  map.pick(...map.project(30.2, 20));
+  assert.equal(walked.length, 1);
+});

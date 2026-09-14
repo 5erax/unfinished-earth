@@ -98,7 +98,11 @@ export class Map2D {
     }
     const nearest=this.targets.map(t=>({t,d:Math.hypot(p.x-t.x,p.z-t.z)})).sort((a,b)=>a.d-b.d)[0];
     if(!this.preview&&nearest&&nearest.d<=.85){this.choose(nearest.t.id);return;}
-    const x=Math.round(p.x),z=Math.round(p.z);if(isMapTile(x,z))this.travel({x,z});
+    if(this.preview){
+      const x=Math.round(p.x),z=Math.round(p.z);if(isMapTile(x,z))this.travel({x,z});
+    }else if(Number.isFinite(p.x)&&Number.isFinite(p.z)&&p.x>=1&&p.x<=30&&p.z>=1&&p.z<=30){
+      this.travel(p);
+    }
   }
   makeTerrain(){
     const canvas=document.createElement('canvas');canvas.width=canvas.height=32*TILE+PAD*2;
@@ -226,6 +230,15 @@ export class Map2D {
     rect(c,gx,gy-6,11,12,state?.gate?'#53a3ab':'#695a40');rect(c,gx-7,gy-13,25,4,'#d1c8a0');
     if(!state?.gate)for(let j=0;j<3;j++)rect(c,gx+1+j*4,gy-6,1,12,'#b19864');
     this.targets=state?LANDMARKS.map(([id,x,z,label])=>({id,x,z,label})):[];
+    const player=state?.players[state.you],route=this.route||[];
+    if(player&&route.length){
+      c.save();c.strokeStyle='#f6e1a6aa';c.lineWidth=2;c.setLineDash([3,5]);c.beginPath();
+      c.moveTo((player.x+.5)*TILE,(player.z+.5)*TILE);
+      for(const p of route)c.lineTo((p.x+.5)*TILE,(p.z+.5)*TILE);
+      c.stroke();c.restore();
+      const end=route.at(-1),x=(end.x+.5)*TILE,y=(end.z+.5)*TILE;
+      rect(c,x-4,y-1,9,2,'#fff0ba');rect(c,x-1,y-4,2,9,'#fff0ba');
+    }
     const objects=[];
     for(const [id,x,z] of LANDMARKS){
       if(['west','east'].includes(id)){
@@ -302,7 +315,6 @@ export class Map2D {
       if(!state){const [x,y]=this.project(7,23.8);this.label('Nơi câu chuyện bắt đầu',x,y);}
     }
     if(chosen&&this.showLabels){const [x,y]=this.project(chosen.x,chosen.z-1.8);this.label(chosen.label,x,y,true);}
-    const player=state?.players?.[state.you];
     if(player&&this.showLabels){const [x,y]=this.project(player.x,player.z+1.05);this.label('Bạn',x,y,true);}
   }
 }

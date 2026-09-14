@@ -11,7 +11,7 @@ export class Motion {
   enqueue(world, x, z, walkable) {
     const p = this.target(world.you, world.players[world.you], world.you);
     if (
-      this.pending.length >= 4 ||
+      this.pending.length >= 8 ||
       Math.abs(p.x - x) + Math.abs(p.z - z) !== 1 ||
       !walkable(world, x, z)
     )
@@ -20,8 +20,13 @@ export class Motion {
     this.route.push({ x, z });
     return true;
   }
-  acknowledge(ok) {
-    if (ok) this.pending.shift();
+  enqueueContinuous(world, x, z, freeSegment) {
+    const p=this.target(world.you,world.players[world.you],world.you);
+    if(this.pending.length>=240 || Math.hypot(x-p.x,z-p.z)<1e-8 || !freeSegment(world,p,{x,z})) return false;
+    this.pending.push({x,z}); this.route.push({x,z}); return true;
+  }
+  acknowledge(ok, count = 1) {
+    if (ok) this.pending.splice(0, count);
     else {
       this.pending = [];
       this.route = [];
@@ -37,20 +42,23 @@ export class Motion {
         v = { x: p.x, z: p.z };
         this.points.set(id, v);
       }
-      if (id === world.you) {
-        while (
-          this.route.length &&
-          Math.hypot(this.route[0].x - v.x, this.route[0].z - v.z) < 0.001
-        )
-          this.route.shift();
-        target = this.route[0] || target;
-      }
-      const distance = Math.hypot(target.x - v.x, target.z - v.z);
-      if (distance > 0.001) {
-        const factor = Math.min(1, (Math.max(0, dt) * 7) / distance);
-        v.x += (target.x - v.x) * factor;
-        v.z += (target.z - v.z) * factor;
+      // A display frame may contain several input samples. Spend its distance
+      // budget along each segment so a 30 fps view never falls behind or cuts corners.
+      let budget = Math.max(0, dt) * (this.continuous ? 5 : 7);
+      while (true) {
+        if (id === world.you) {
+          while (this.route.length && Math.hypot(this.route[0].x - v.x, this.route[0].z - v.z) < 1e-8)
+            this.route.shift();
+          target = this.route[0] || this.target(id, p, world.you);
+        }
+        const distance = Math.hypot(target.x - v.x, target.z - v.z);
+        if (distance < 1e-8 || budget <= 0) break;
+        const step = Math.min(distance, budget);
+        v.x += (target.x - v.x) * step / distance;
+        v.z += (target.z - v.z) * step / distance;
+        budget -= step;
         moving = true;
+        if (step < distance) break;
       }
       players[id] = { ...p, x: v.x, z: v.z };
     }

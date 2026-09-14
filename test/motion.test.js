@@ -2,6 +2,23 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Motion } from "../public/motion.js";
 const world = () => ({ you: "a", players: { a: { x: 7, z: 22 } } });
+test("continuous display follows the same corner route at 30 and 60 fps", () => {
+  const run = fps => {
+    const w = world(), m = new Motion();
+    m.continuous = true;
+    m.frame(w, 0);
+    for (let i=1; i<=10; i++) m.enqueueContinuous(w, 7+i*.05, 22, () => true);
+    for (let i=1; i<=30; i++) m.enqueueContinuous(w, 7.5, 22+i*.05, () => true);
+    let visual;
+    for (let i=0; i<fps/5; i++) visual=m.frame(w, 1/fps).players.a;
+    assert.ok(Math.abs(visual.x-7.5)<1e-8);
+    assert.ok(Math.abs(visual.z-22.5)<1e-8);
+    assert.equal(w.players.a.x, 7);
+    return visual;
+  };
+  const a=run(30), b=run(60);
+  assert.ok(Math.hypot(a.x-b.x,a.z-b.z)<1e-8);
+});
 test("prediction responds before acknowledgement without modifying authoritative position", () => {
   const w = world(),
     m = new Motion();
@@ -35,13 +52,13 @@ test("prediction is bounded, respects walls and acknowledges only first queued s
     m.enqueue(w, 10, 22, () => true),
     false,
   );
-  for (let x = 8; x <= 11; x++) assert.ok(m.enqueue(w, x, 22, () => true));
+  for (let x = 8; x <= 15; x++) assert.ok(m.enqueue(w, x, 22, () => true));
   assert.equal(
-    m.enqueue(w, 12, 22, () => true),
+    m.enqueue(w, 16, 22, () => true),
     false,
   );
   w.players.a.x = 8;
   m.acknowledge(true);
-  assert.equal(m.pending.length, 3);
-  assert.equal(m.target("a", w.players.a, "a").x, 11);
+  assert.equal(m.pending.length, 7);
+  assert.equal(m.target("a", w.players.a, "a").x, 15);
 });

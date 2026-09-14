@@ -11,11 +11,14 @@ const journal = new CommandJournal({
 let recovering = false;
 import { Motion } from "/motion.js";
 const motion = new Motion();
+motion.continuous = true;
 let sendingMove = false,
   nextMoveAt = 0;
 const held = new Map();
 import {
   BUILDINGS,
+  CLASSES,
+  freeSegment, findRoute, MOVE_SPEED,
   placementProblem,
   housingCapacity,
   walkable as mapWalkable,
@@ -97,6 +100,13 @@ async function api(url, options = {}) {
 }
 function accept(next) {
   if (!state || next.revision >= state.revision) {
+    if (state?.you !== next.you) {
+      motion.acknowledge(false);
+      motion.points.clear();
+      held.clear();
+      path = [];
+      queuedAction = null;
+    }
     state = next;
     online = true;
     renderUI();
@@ -163,7 +173,7 @@ async function command(cmd) {
     busy ||
     recovering ||
     !state ||
-    (cmd.type !== "move" && motion.pending.length)
+    (!["move", "walk", "glide"].includes(cmd.type) && motion.pending.length)
   )
     return false;
   if (hasPending()) {
@@ -237,7 +247,7 @@ $("join-form").addEventListener("submit", async (e) => {
   try {
     const r = await api("/api/join", {
       method: "POST",
-      body: JSON.stringify({ code: $("access-code").value }),
+      body: JSON.stringify({ code: $("access-code").value, character: { name: $("character-name").value, classId: document.querySelector('[name="join-class"]:checked').value } }),
     });
     if (r.ok) {
       accept(r.data);
@@ -268,6 +278,7 @@ function select(id) {
     }
   }
   selected = id;
+  document.querySelector(".inspect").classList.add("open");
   const select = $("places");
   if (![...select.options].some((o) => o.value === id)) {
     const o = document.createElement("option");
@@ -295,44 +306,15 @@ function canWalk(x, z) {
   return mapWalkable(state, x, z);
 }
 
-function travel(destination) {
+function travel(destination, radius = 2) {
   if (!state || !online || recovering || (!busy && hasPending())) return;
-  path = [];
-  const p = motion.target(state.you, state.players[state.you], state.you),
-    queue = [[p.x, p.z]],
-    prev = new Map([[`${p.x},${p.z}`, null]]);
-  let found;
-  for (let i = 0; i < queue.length; i++) {
-    const [x, z] = queue[i];
-    if (Math.hypot(x - destination.x, z - destination.z) <= 2) {
-      found = [x, z];
-      break;
-    }
-    for (const [dx, dz] of [
-      [0, -1],
-      [1, 0],
-      [0, 1],
-      [-1, 0],
-    ]) {
-      const nx = x + dx,
-        nz = z + dz,
-        key = `${nx},${nz}`;
-      if (canWalk(nx, nz) && !prev.has(key)) {
-        prev.set(key, [x, z]);
-        queue.push([nx, nz]);
-      }
-    }
-  }
-  if (!found) {
-    toast("Không có đường đến đây. Cần sửa cầu trước.");
-    return;
-  }
-  let cursor = found;
-  while (prev.get(cursor.join(","))) {
-    path.unshift(cursor);
-    cursor = prev.get(cursor.join(","));
-  }
-  if (!path.length) toast("Bạn đã ở gần địa điểm.");
+  queuedAction = null;
+  const p = motion.target(state.you, state.players[state.you], state.you);
+  const route = findRoute(state,p,destination,radius);
+  path = route || [];
+  worldMap.destination = route?.length ? { x:route.at(-1)[0], z:route.at(-1)[1] } : null;
+  if (!route) { toast("Không có đường tới điểm này. Hãy chọn đất trống hoặc kiểm tra cầu và vật cản."); return false; }
+  return true;
 }
 $("travel").onclick = () => {
   const t = target();
@@ -348,22 +330,37 @@ async function sendMoves() {
   )
     return;
   sendingMove = true;
-  const next = motion.pending[0];
-  const ok = await command({ type: "move", ...next });
-  motion.acknowledge(ok);
+  const steps = motion.pending.slice(0, 64);
+  const before = state.players[state.you].moveSeq || 0,
+    sent = performance.now();
+  const ok = await command({ type: "glide", steps });
+  const accepted = Math.max(
+    0,
+    Math.min(steps.length, (state.players[state.you].moveSeq || 0) - before),
+  );
+  motion.acknowledge(ok, accepted);
+  $("latency").textContent =
+    `Đồng bộ ${Math.round(performance.now() - sent)} ms`;
   if (!ok) {
     path = [];
     held.clear();
   }
   // Space requests after acknowledgement so server-side rate validation remains valid.
-  nextMoveAt = performance.now() + 165;
+  nextMoveAt = sent + 180;
   sendingMove = false;
 }
-function move(dx, dz) {
-  if (!state || !online || recovering || (!busy && hasPending())) return;
-  path = [];
+function move(dx, dz, dt) {
+  queuedAction = null; path = [];
+  worldMap.destination = null;
   const p = motion.target(state.you, state.players[state.you], state.you);
-  if (motion.enqueue(state, p.x + dx, p.z + dz, mapWalkable)) sendMoves();
+  const length = Math.hypot(dx,dz); if(!length) return;
+  dx/=length; dz/=length;
+  const x=dx*MOVE_SPEED*dt;
+  const z=dz*MOVE_SPEED*dt;
+  if(!motion.enqueueContinuous(state,p.x+x,p.z+z,freeSegment)) {
+    // Slide along a bank/wall without stepping through it.
+    if(!motion.enqueueContinuous(state,p.x+x,p.z,freeSegment)) motion.enqueueContinuous(state,p.x,p.z+z,freeSegment);
+  }
 }
 const directions = {
   w: [0, -1],
@@ -380,17 +377,19 @@ function inputBlocked() {
     ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName) ||
     $("help-dialog").open ||
     $("welcome").open ||
+    $("character-dialog").open ||
     document.hidden
   );
 }
 let lastStep = 0;
+let queuedAction = null;
 window.addEventListener("keydown", (e) => {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (!directions[key] || inputBlocked()) return;
   e.preventDefault();
   if (!held.has(key)) {
     held.set(key, directions[key]);
-    move(...directions[key]);
+    path = []; queuedAction = null;
     lastStep = performance.now();
   }
 });
@@ -408,7 +407,7 @@ for (const b of document.querySelectorAll("[data-move]")) {
     b.setPointerCapture(e.pointerId);
     const d = b.dataset.move.split(",").map(Number);
     held.set("pointer", d);
-    move(...d);
+    path = []; queuedAction = null;
     lastStep = performance.now();
   };
   b.onpointerup =
@@ -427,19 +426,33 @@ pathTimer = setInterval(() => {
     held.clear();
     return;
   }
-  const now = performance.now();
-  if (now - lastStep >= 180) {
-    if (held.size) {
-      move(...[...held.values()].at(-1));
-      lastStep = now;
-    } else if (path.length && motion.pending.length < 4) {
-      const [x, z] = path[0];
-      if (motion.enqueue(state, x, z, mapWalkable)) path.shift();
-      else path = [];
-      lastStep = now;
-    }
+  const now = performance.now(), dt=Math.min(.05,Math.max(0,(now-lastStep)/1000));
+  lastStep=now;
+  if (held.size) {
+    const input=[...held.values()].reduce((a,b)=>[a[0]+b[0],a[1]+b[1]],[0,0]);
+    move(input[0],input[1],dt);
+  } else if (path.length && motion.pending.length < 240) {
+    const p=motion.target(state.you,state.players[state.you],state.you), [x,z]=path[0];
+    const distance=Math.hypot(x-p.x,z-p.z), fraction=Math.min(1,MOVE_SPEED*dt/distance);
+    if(distance<1e-6) path.shift();
+    else if(motion.enqueueContinuous(state,p.x+(x-p.x)*fraction,p.z+(z-p.z)*fraction,freeSegment)) {
+      if(fraction===1) path.shift();
+    } else { path=[]; queuedAction=null; toast("Đường đi đã thay đổi. Hãy chọn lại điểm đến."); }
   }
   sendMoves();
+  if (
+    queuedAction &&
+    !path.length &&
+    !motion.pending.length &&
+    !busy &&
+    !recovering
+  ) {
+    const a = queuedAction;
+    queuedAction = null;
+    const p = state.players[state.you];
+    if (Math.hypot(p.x - a.destination.x, p.z - a.destination.z) <= 2.5)
+      command(a.cmd);
+  }
 }, 16);
 function plot() {
   return { x: Number($("build-x").value), z: Number($("build-z").value) };
@@ -451,8 +464,8 @@ function choosePlot(t) {
   renderWorld();
 }
 function mapTravel(t) {
-  if ($("construction").open) choosePlot(t);
-  else travel(t);
+  if ($("construction").open) choosePlot({x:Math.round(t.x),z:Math.round(t.z)});
+  else travel(t, 0);
 }
 function plotPreview() {
   if (!state || !$("construction").open) return null;
@@ -516,6 +529,96 @@ for (const [id, direction] of [
       amount: Number($("storage-amount").value),
       direction,
     });
+let questTarget = "home-wood";
+function updateQuest() {
+  const p = state.players[state.you];
+  let title, hint;
+  if (!state.bridge) {
+    if (p.bag.wood < 8) {
+      title = "Gom gỗ cho cây cầu";
+      hint = `Còn ${8 - p.bag.wood} gỗ. Đến rừng, chọn cây rồi thu thập.`;
+      questTarget = state.resources
+        .filter((r) => r.type === "wood" && r.remaining > 0 && r.x < 15)
+        .sort(
+          (a, b) =>
+            Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z),
+        )[0]?.id;
+    } else if (p.bag.stone < 4) {
+      title = "Tìm đá gia cố";
+      hint = `Còn ${4 - p.bag.stone} đá để dựng lại trụ cầu.`;
+      questTarget = state.resources
+        .filter((r) => r.type === "stone" && r.remaining > 0 && r.x < 15)
+        .sort(
+          (a, b) =>
+            Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z),
+        )[0]?.id;
+    } else {
+      title = "Dựng lại cây cầu";
+      hint = "Đủ 8 gỗ và 4 đá. Đến bờ tây, sửa cầu để nối hai làng.";
+      questTarget = "bridge";
+    }
+  } else if (
+    p.bag.food > 0 || (!state.deliveries &&
+    !state.events.some((e) => e.kind === "food" && e.place === "east"))
+  ) {
+    title = p.bag.food ? "Mang thức ăn qua sông" : "Lấy lương thực";
+    hint = p.bag.food
+      ? "Đến Làng Hạ và giao khẩu phần. Cây cầu đã mở một đường sống mới."
+      : "Đến kho chung lấy thức ăn rồi giao cho Làng Hạ.";
+    questTarget = p.bag.food ? "east" : state.depot > 0 ? "depot" : "farm";
+    if (!p.bag.food && state.depot === 0) {
+      title = "Bổ sung lương thực";
+      hint =
+        "Kho chung đã hết hàng. Đến ruộng thu hoạch để tiếp tục chuyến giao thức ăn.";
+    }
+  } else if (!state.gateCause) {
+    title = "Đưa nước về ruộng";
+    hint =
+      "Gom thêm 4 gỗ, 2 đá để mở cống. Ruộng lớn nhanh hơn, nhưng cá hạ lưu sẽ giảm.";
+    questTarget = "gate";
+    const needed=p.bag.wood<4?"wood":p.bag.stone<2?"stone":null;
+    if(needed){questTarget=state.resources.filter(r=>r.type===needed&&r.remaining>0).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]?.id;hint=`Cần thêm ${needed==="wood"?4-p.bag.wood:2-p.bag.stone} ${needed==="wood"?"gỗ":"đá"} để mở cống. Dẫn đường sẽ đưa bạn tới nguồn còn hàng.`;}
+  } else {
+    title = "Dựng một nơi để ở lại";
+    hint =
+      "Xây nhà gần làng để thêm chỗ ở, hoặc dựng kho để cất vật liệu. Xem lịch sử để hiểu thung lũng đổi thay.";
+    questTarget = null;
+  }
+  $("quest-title").textContent = title;
+  $("quest-hint").textContent = hint;
+  $("quest-go").textContent = questTarget
+    ? "Dẫn đường đến mục tiêu →"
+    : "Mở xây dựng →";
+  const done =
+    (state.bridge ? 2 : p.bag.wood >= 8 && p.bag.stone >= 4 ? 1 : 0) +
+    (state.deliveries > 0 ? 1 : 0) +
+    (state.gateCause ? 1 : 0);
+  $("quest-progress").textContent = `${done} / 4 cột mốc đã đạt`;
+}
+$("quest-go").onclick = () => {
+  if (questTarget) {
+    select(questTarget);
+    const t = target();
+    travel(questTarget === "bridge" ? { x: 14, z: 17 } : t);
+  } else $("build-toggle").click();
+};
+$("close-inspect").onclick = () =>
+  document.querySelector(".inspect").classList.remove("open");
+$("build-toggle").onclick = () => {
+  document.querySelector(".inspect").classList.add("open");
+  $("construction").open = true;
+};
+$("map-overview").onclick = () => { worldMap.resetView(); renderWorld(); };
+window.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "e" && !inputBlocked()) {
+    $("actions").querySelector("button:not(:disabled)")?.click();
+  }
+  if (e.key === "Escape") {
+    document.querySelector(".inspect").classList.remove("open");
+    path = [];
+    held.clear();
+  }
+});
 let actionSpecs = [];
 function action(label, cmd, disabled = false) {
   actionSpecs.push({ label, cmd, disabled });
@@ -529,7 +632,21 @@ function commitActions() {
     const b = document.createElement("button");
     b.textContent = label;
     b.disabled = disabled;
-    b.onclick = () => command(cmd);
+    b.onclick = () => {
+      const t = target(),
+        p = state.players[state.you];
+      const destination = selected === "bridge" ? { x: 14, z: 17 } : t;
+      if (
+        destination &&
+        Math.hypot(p.x - destination.x, p.z - destination.z) > 2.5
+      ) {
+        if (!travel(destination)) return;
+        queuedAction = { cmd, destination };
+        toast("Đang đến gần để thực hiện thao tác…");
+        return;
+      }
+      command(cmd);
+    };
     $("actions").append(b);
   }
 }
@@ -541,10 +658,10 @@ function renderUI() {
   $("clock").textContent =
     `Ngày ${state.day} · ${state.weather} · ×${state.speed}`;
   $("connection").textContent = `${state.online} người kết nối`;
-  $("coordinates").textContent = `${p.x * 16} / ${p.z * 16} m`;
+  $("coordinates").textContent = `${Math.round(p.x * 16)} / ${Math.round(p.z * 16)} m`;
   for (const kind of ["wood", "stone", "food"])
     $(kind).textContent = p.bag[kind];
-  $("save").textContent = "Tiến độ đã được lưu";
+  $("save").textContent = "Tiến độ được lưu tự động";
   $("credit").textContent =
     `Tín dụng offline: ${Math.floor(state.creditMs / 60000)} / 480 phút`;
   const complete = [
@@ -556,6 +673,7 @@ function renderUI() {
   [...$("objectives").children].forEach((li, i) =>
     li.classList.toggle("done", complete[i]),
   );
+  updateQuest();
   $("villages").replaceChildren();
   for (const v of state.villages) {
     const population = state.npcs.filter((n) => n.village === v.id).length;
@@ -582,6 +700,12 @@ function renderUI() {
     `Còn ${r?.remaining ?? 0} đơn vị. Mỗi lần thu thập lấy một đơn vị, túi tối đa 40.`,
   ];
   $("selection-title").textContent = title;
+  const focus = selected === "bridge" ? { x: 14, z: 17 } : target();
+  const distance = focus ? Math.hypot(p.x - focus.x, p.z - focus.z) : 0;
+  $("world-hint").textContent =
+    distance > 2.5
+      ? `${title} · ${Math.round(distance * 16)} m · Chọn thao tác để đi tới`
+      : `${title} · E để tương tác`;
   $("selection-description").textContent = description;
   actionSpecs = [];
   if (r)
@@ -696,6 +820,7 @@ const container = $("world");
 const worldMap = new Map2D(container, select, mapTravel);
 function renderWorld(dt = 0) {
   const visual = state ? { ...state, players: motion.frame(state, dt).players } : null;
+  worldMap.route = [...motion.pending, ...path.map(([x, z]) => ({ x, z }))];
   worldMap.draw(visual, selected, 0, plotPreview());
   const level = $("zoom-level");
   const zoomText = `${Math.round(worldMap.zoom * 100)}%`;
@@ -741,6 +866,57 @@ document.addEventListener("visibilitychange", () => {
     held.clear();
   }
 });
+
+function classChoices(container, group, current = "builder") {
+  $(container).replaceChildren(...Object.entries(CLASSES).map(([id, cl]) => {
+    const card = document.createElement("label"); card.className = "class-card";
+    const radio = document.createElement("input"); radio.type = "radio"; radio.name = group; radio.value = id; radio.checked = id === current;
+    const art = document.createElement("span"); art.className = `character-art character-${cl.art}`; art.setAttribute("aria-hidden", "true");
+    const title = document.createElement("strong"); title.textContent = cl.name;
+    const role = document.createElement("span"); role.className = "class-role"; role.textContent = cl.role;
+    const description = document.createElement("p"); description.textContent = cl.description;
+    const detail = document.createElement("small"); detail.textContent = [cl.passive, ...cl.skills].join(" ");
+    card.append(radio, art, title, role, description, detail); return card;
+  }));
+}
+classChoices("class-choices", "join-class");
+$("character-open").onclick = () => {
+  if (!state) return;
+  held.clear(); path = []; queuedAction = null;
+  const p = state.players[state.you];
+  $("profile-name").value = p.name; $("profile-error").textContent = "";
+  classChoices("profile-choices", "profile-class", p.classId || "builder");
+  $("character-dialog").showModal();
+};
+$("character-close").onclick = () => $("character-dialog").close();
+$("character-form").onsubmit = async e => {
+  e.preventDefault(); e.submitter.disabled = true;
+  try {
+    const ok = await command({ type: "character", name: $("profile-name").value, classId: document.querySelector('[name="profile-class"]:checked').value });
+    if (ok) $("character-dialog").close();
+    else $("profile-error").textContent = "Chưa lưu được. Hãy về nơi trú ẩn và chờ các thao tác hoàn tất.";
+  } finally { e.submitter.disabled = false; }
+};
+function useSkill(skill) { if (!inputBlocked()) { held.clear(); path = []; queuedAction = null; command({ type: "skill", skill }); } }
+$("skill-collect").onclick = () => useSkill("collect");
+$("skill-focus").onclick = () => useSkill("focus");
+window.addEventListener("keydown", e => {
+  if (e.repeat || inputBlocked()) return;
+  if (e.key.toLowerCase() === "q") useSkill("collect");
+  if (e.key.toLowerCase() === "r") useSkill("focus");
+});
+setInterval(() => {
+  const p = state?.players[state.you];
+  $("skill-bar").hidden = !p?.classId;
+  if (!p?.classId) return;
+  $("class-name").textContent = CLASSES[p.classId]?.name || "";
+  for (const [key, label] of [["collect", "Q · Gom vật liệu"], ["focus", "R · Tập trung"]]) {
+    const b = $("skill-" + key), left = Math.max(0, Math.ceil(((p.cooldowns?.[key] || 0)-Date.now())/1000));
+    b.hidden = p.classId !== "builder"; b.disabled = !!left || busy || recovering || motion.pending.length > 0;
+    b.textContent = left ? `${label} (${left}s)` : label;
+  }
+}, 250);
+
 await poll();
 setInterval(() => {
   if (!document.hidden) poll();

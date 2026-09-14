@@ -1044,3 +1044,161 @@ input {
     scroll-behavior: auto !important;
   }
 }
+
+/* Character journeys share the compact pixel-world palette. */
+.inspect { position: relative; }
+.inspect:not(.open) { display: none; }
+#game:has(.inspect:not(.open)) {
+  grid-template-columns: 230px minmax(0, 1fr);
+  grid-template-areas: "top top" "left map" "bottom bottom";
+}
+#close-inspect {
+  position: absolute;
+  top: 8px;
+  right: 7px;
+  width: 25px;
+  height: 25px;
+  min-height: 0;
+  padding: 0;
+  font-size: 20px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--muted);
+}
+.inspect .panel-heading { padding-right: 21px; }
+.mission > p:first-of-type { margin-bottom: 8px; }
+#quest-hint { color: #d5ddbe; }
+#quest-go { margin-top: 10px; font-size: 11px; padding: 10px; }
+#quest-progress { font-size: 10px; color: #9aae9b; margin-top: 11px; }
+.controls button { white-space: nowrap; }
+#world-hint {
+  position: absolute;
+  bottom: 103px;
+  left: 14px;
+  max-width: calc(100% - 28px);
+  padding: 7px 9px;
+  background: #11232ce8;
+  border: 1px solid #72907850;
+  color: #d8dfc8;
+  font-size: 10px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.skill-bar {
+  position: absolute;
+  z-index: 3;
+  left: 14px;
+  bottom: 50px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 28px);
+  padding: 6px;
+  background: #12212ff2;
+}
+.skill-bar span { color: var(--gold); font-size: 10px; padding: 0 5px; }
+.skill-bar button { font-size: 10px; padding: 8px 6px; }
+#toast { bottom: 145px; }
+#welcome, #character-dialog {
+  width: min(960px, calc(100% - 28px));
+}
+#welcome h2, #character-dialog h2 { font-size: clamp(25px, 3vw, 32px); }
+#welcome form > p { max-width: 80ch; margin: 8px 0; }
+#welcome .welcome-art {
+  background: #162b39;
+  height: 126px;
+  margin-bottom: 18px;
+}
+#welcome .welcome-art svg { width: 378px; height: 126px; margin: auto; }
+#welcome form > label, #character-form > label { display: block; font-size: 12px; color: #c7cfbc; margin-top: 17px; }
+#character-name, #profile-name { width: min(100%, 360px); }
+.class-choices {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+.class-card {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #485c57;
+  border-radius: 3px;
+  background: #192e34;
+  box-shadow: inset 0 1px #ffffff08, 0 3px #091822;
+  cursor: pointer;
+}
+.class-card:has(input:checked) {
+  border-color: #dec184;
+  background: #303e34;
+  box-shadow: inset 0 0 0 1px #bba16a, 0 3px #091822;
+}
+.class-card:focus-within { outline: 2px solid #f1d699; outline-offset: 3px; }
+.class-card input {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  accent-color: #dbba75;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.character-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  background-image: url('/characters-v1.png');
+  background-size: 200% 200%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.character-0 { background-position: 0 0; }
+.character-1 { background-position: 100% 0; }
+.character-2 { background-position: 0 100%; }
+.character-3 { background-position: 100% 100%; }
+.class-card strong { color: #f0ddb2; font-size: 16px; margin-top: 8px; }
+.class-role { color: #d4bd8f; font-size: 11px; margin-top: 6px; }
+dialog .class-card p { font-size: 12px; line-height: 1.55; margin: 8px 0; }
+dialog .class-card small { font-size: 11px; line-height: 1.6; color: #c2c9b7; margin: 0; }
+.class-card:not(:has(input:checked)) small { display: none; }
+.character-actions { display: flex; justify-content: flex-end; gap: 10px; align-items: stretch; }
+.character-actions .primary { width: auto; margin: 0; }
+#profile-error { color: #e9b38b; font-size: 12px; }
+@media (max-width: 1180px) {
+  .controls > span { display: none; }
+  .toolbar { gap: 10px; }
+}
+@media (max-width: 1000px) and (min-width: 901px) {
+  .controls { display: flex; gap: 5px; }
+  .controls button { font-size: 10px; padding: 9px 7px; }
+  .save { max-width: 155px; }
+}
+@media (max-width: 900px) {
+  #game:has(.inspect:not(.open)) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 64px minmax(60dvh, 380px) auto auto;
+    grid-template-areas: "top" "map" "bottom" "left";
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 7px; }
+  .controls button { flex: 1; }
+  .toolbar .controls { width: 100%; }
+  .skill-bar button { min-height: 34px; }
+  #world-hint { bottom: 105px; left: 10px; font-size: 9px; }
+  .skill-bar { left: 10px; bottom: 55px; max-width: calc(100% - 20px); }
+}
+@media (max-width: 640px) {
+  .class-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .class-card { padding: 9px; }
+  .class-card strong { font-size: 14px; }
+  #welcome .welcome-art > span { top: 9px; left: 10px; font-size: 6px; letter-spacing: 1px; }
+}
+@media (max-width: 440px) {
+  .skill-bar { bottom: 87px; gap: 4px; }
+  .skill-bar span { display: none; }
+  .skill-bar button { font-size: 9px; padding: 6px; }
+  #world-hint { bottom: 135px; }
+  #toast { bottom: 181px; }
+}

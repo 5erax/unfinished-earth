@@ -1,0 +1,46 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createWorld, join, applyCommand, POINTS } from '../src/world.js';
+import { view } from '../src/cloud-worker.js';
+
+test('character selection validates input, preserves legacy saves and restricts changes to home', () => {
+  const w = createWorld(1000);
+  join(w, 'old', 1000);
+  assert.equal(w.players.old.classId, undefined);
+  assert.throws(() => join(w, 'bad', 1000, {name:'A', classId:'__proto__'}));
+  assert.equal(w.players.bad, undefined);
+  join(w, 'a', 1000, {name:'  Hạ Đan  ', classId:'builder'});
+  const p = w.players.a;
+  assert.equal(p.name, 'Hạ Đan');
+  p.cooldowns = {collect: 40000};
+  applyCommand(w, 'a', {type:'character', name:'Hạ Đan', classId:'keeper'}, 1000);
+  assert.equal(p.cooldowns.collect, 40000);
+  p.x = 25; p.z = 25;
+  assert.throws(() => applyCommand(w, 'a', {type:'character', name:'Hạ Đan', classId:'builder'}, 1000));
+  assert.equal(p.classId, 'keeper');
+  const snapshot = view(w, 'a', 1000, 1);
+  assert.equal(snapshot.players.a.classId, 'keeper');
+  assert.equal(snapshot.players.a.cooldowns.collect, 40000);
+});
+test('builder skills conserve resources, cap inventory and enforce cooldowns', () => {
+  const w = createWorld(1000);
+  join(w, 'a', 1000, {name:'Builder', classId:'builder'});
+  const p = w.players.a;
+  w.resources = [{id:'rock',type:'stone',x:p.x,z:p.z,remaining:10}];
+  applyCommand(w,'a',{type:'gather',target:'rock'},1000);
+  assert.equal(p.bag.stone,2); assert.equal(w.resources[0].remaining,8);
+  applyCommand(w,'a',{type:'skill',skill:'collect'},1000);
+  assert.equal(p.bag.stone,8); assert.equal(w.resources[0].remaining,2);
+  assert.throws(() => applyCommand(w,'a',{type:'skill',skill:'collect'},2000));
+  applyCommand(w,'a',{type:'skill',skill:'focus'},2000);
+  assert.throws(() => applyCommand(w,'a',{type:'skill',skill:'focus'},2001));
+  p.bag.stone=39;
+  applyCommand(w,'a',{type:'gather',target:'rock'},2250);
+  assert.equal(p.bag.stone,40); assert.equal(w.resources[0].remaining,1);
+  const before=structuredClone(w);
+  assert.throws(() => applyCommand(w,'a',{type:'skill',skill:'collect'},40000));
+  assert.deepEqual(w,before);
+  p.bag.stone=0;
+  applyCommand(w,'a',{type:'gather',target:'rock'},40000);
+  assert.equal(p.bag.stone,1); assert.equal(w.resources[0].remaining,0);
+});

@@ -32,10 +32,17 @@ export function createGameServer({
             {
               id,
               name: p.name,
+              classId: p.classId || null,
               x: p.x,
               z: p.z,
               ...(id === player
-                ? { bag: p.bag, discoveries: p.discoveries }
+                ? {
+                    bag: p.bag,
+                    cooldowns: p.cooldowns || {},
+                    focusUntil: p.focusUntil || 0,
+                    discoveries: p.discoveries,
+                    moveSeq: p.moveSeq || 0,
+                  }
                 : {}),
             },
           ]),
@@ -73,7 +80,9 @@ export function createGameServer({
       parts.push(chunk);
     }
     try {
-      return JSON.parse(Buffer.concat(parts).toString());
+      const parsed = JSON.parse(Buffer.concat(parts).toString());
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw Error();
+      return parsed;
     } catch {
       throw Object.assign(new Error("JSON không hợp lệ."), { status: 400 });
     }
@@ -82,6 +91,8 @@ export function createGameServer({
     ["/world-rules.js", ["src/world.js", "text/javascript"]],
     ["/map2d.js", ["public/map2d.js", "text/javascript"]],
     ["/motion.js", ["public/motion.js", "text/javascript"]],
+    ["/characters-v1.png", ["public/characters-v1.png", "image/png"]],
+    ["/world-sprites.png", ["public/world-sprites.png", "image/png"]],
     ["/command-journal.js", ["public/command-journal.js", "text/javascript"]],
     ["/", ["public/index.html", "text/html"]],
     ["/app.js", ["public/app.js", "text/javascript"]],
@@ -163,6 +174,12 @@ export function createGameServer({
           send(res, 403, { error: "Mã thế giới không đúng." });
           return;
         }
+        for (const [player, when] of seen)
+          if (now - when >= 15000) seen.delete(player);
+        if (Object.keys(store.world.players).length >= 100) {
+          send(res, 409, { error: "Bản thử nghiệm đã đạt giới hạn 100 nhân vật. Hãy quay lại bằng phiên cũ." });
+          return;
+        }
         if (seen.size >= 8) {
           send(res, 409, { error: "Thế giới đã có 8 người đang kết nối." });
           return;
@@ -171,13 +188,14 @@ export function createGameServer({
         const token = randomBytes(32).toString("hex"),
           id = randomBytes(8).toString("hex");
         const w = structuredClone(store.world);
-        join(w, id, now);
+        join(w, id, now, data.character);
         w.revision++;
-        // A failed session insert cannot ACK a playable session; the orphan player owns no assets.
-        store.save(w);
-        store.db
-          .prepare("INSERT INTO sessions VALUES(?,?,?)")
-          .run(digest(token), id, now + 30 * 86400000);
+        // Publish the character and its credential together, or neither.
+        store.save(w, undefined, {
+          token: digest(token),
+          player: id,
+          expires: now + 30 * 86400000,
+        });
         seen.set(id, now);
         res.setHeader(
           "Set-Cookie",
@@ -204,6 +222,12 @@ export function createGameServer({
         return;
       }
       const id = session.player;
+      if (!store.world.players[id]) {
+        send(res, 401, { error: "Phiên chơi không còn trong save." });
+        return;
+      }
+      for (const [player, when] of seen)
+        if (clock() - when >= 15000) seen.delete(player);
       if (!seen.has(id) && seen.size >= 8) {
         send(res, 409, { error: "Thế giới đã đủ 8 kết nối." });
         return;
@@ -244,12 +268,14 @@ export function createGameServer({
           w.creditMs = Math.min(CREDIT_MS, w.creditMs + earned);
           w.revision++;
           result = { status: 200, payload: { message } };
-          store.save(w, { player: id, id: cmd.id, result });
         } catch (error) {
           // Rejected commands are durable too; retrying cannot turn a prior failure into a success.
           result = { status: 400, payload: { error: error.message } };
-          store.save(store.world, { player: id, id: cmd.id, result });
         }
+        // Storage failures are retryable server errors, never durable gameplay rejections.
+        store.save(result.status === 200 ? w : store.world, {
+          player: id, id: cmd.id, result,
+        });
         seen.set(id, clock());
         send(res, result.status, { ...result.payload, state: snapshot(id) });
         return;

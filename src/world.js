@@ -54,7 +54,7 @@ export function placementProblem(w, playerId, kind, x, z) {
     (w.resources || []).some((r) => r.x === x && r.z === z && r.remaining > 0)
   )
     return "Thu thập hết tài nguyên trên ô này trước.";
-  if (Object.values(w.players).some((p) => p.x === x && p.z === z))
+  if (Object.values(w.players).some((p) => Math.abs(p.x-x) <= .72 && Math.abs(p.z-z) <= .72))
     return "Có người chơi đang đứng trên ô này.";
   if ((w.buildings || []).length >= 64)
     return "Vùng thử nghiệm đã đủ 64 công trình.";
@@ -204,6 +204,60 @@ export function createWorld(now = Date.now()) {
   );
   return w;
 }
+// Continuous navigation uses expanded obstacle rectangles (actor radius 0.22).
+export const MOVE_SPEED = 5;
+export function obstacles(w) {
+  const river = w.bridge ? [[14.28,0,17.72,16.72],[14.28,17.28,17.72,32]] : [[14.28,0,17.72,32]];
+  return [...river, ...(w.buildings || []).map(b => [b.x-.72,b.z-.72,b.x+.72,b.z+.72])];
+}
+function pointFree(rects, x, z) {
+  return Number.isFinite(x) && Number.isFinite(z) && x >= 1 && z >= 1 && x <= 30 && z <= 30 &&
+    !rects.some(([l,t,r,b]) => x >= l && x <= r && z >= t && z <= b);
+}
+function clearSegment(rects, a, b) {
+  if (!pointFree(rects,a.x,a.z) || !pointFree(rects,b.x,b.z)) return false;
+  for (const [l,t,r,d] of rects) {
+    let lo=0, hi=1;
+    for (const [start, delta, min, max] of [[a.x,b.x-a.x,l,r],[a.z,b.z-a.z,t,d]]) {
+      if (Math.abs(delta)<1e-12) { if(start<min || start>max) { lo=2; break; } }
+      else { const u=(min-start)/delta, v=(max-start)/delta; lo=Math.max(lo,Math.min(u,v)); hi=Math.min(hi,Math.max(u,v)); }
+    }
+    if (lo<=hi) return false;
+  }
+  return true;
+}
+export function freeSegment(w,a,b) { return clearSegment(obstacles(w),a,b); }
+export function findRoute(w,start,destination,radius=0) {
+  const rects=obstacles(w);
+  if (!pointFree(rects,start.x,start.z) || !Number.isFinite(destination.x) || !Number.isFinite(destination.z)) return null;
+  if (radius>0 && Math.hypot(start.x-destination.x,start.z-destination.z)<=radius) return [];
+  const goals=[];
+  if (pointFree(rects,destination.x,destination.z)) goals.push(destination);
+  if(radius>0) for(let i=0;i<24;i++) {
+    const a=i*Math.PI/12, p={x:destination.x+Math.cos(a)*radius,z:destination.z+Math.sin(a)*radius};
+    if(pointFree(rects,p.x,p.z)) goals.push(p);
+  }
+  if(!goals.length) return null;
+  const nodes=[start,...goals];
+  for(const [l,t,r,b] of rects) for(const x of [l-.02,r+.02]) for(const z of [t-.02,b+.02])
+    if(pointFree(rects,x,z)) nodes.push({x,z});
+  const dist=nodes.map(()=>Infinity), prev=nodes.map(()=>-1), seen=new Set(); dist[0]=0;
+  while(seen.size<nodes.length) {
+    let at=-1;
+    for(let i=0;i<nodes.length;i++) if(!seen.has(i) && (at<0 || dist[i]<dist[at])) at=i;
+    if(at<0 || !Number.isFinite(dist[at])) return null;
+    if(at>0 && at<=goals.length) {
+      const path=[]; while(at>0) { path.unshift([nodes[at].x,nodes[at].z]); at=prev[at]; } return path;
+    }
+    seen.add(at);
+    for(let i=1;i<nodes.length;i++) {
+      if(seen.has(i)) continue;
+      const cost=dist[at]+Math.hypot(nodes[i].x-nodes[at].x,nodes[i].z-nodes[at].z);
+      if(cost<dist[i] && clearSegment(rects,nodes[at],nodes[i])) {dist[i]=cost;prev[i]=at;}
+    }
+  }
+  return null;
+}
 export function walkable(w, x, z) {
   if (
     !Number.isInteger(x) ||
@@ -234,11 +288,34 @@ function spend(p, wood, stone) {
   p.bag.wood -= wood;
   p.bag.stone -= stone;
 }
-export function join(w, id, now) {
+export const CLASSES = {
+  builder: { name: "Thợ dựng", role: "Dựng nhà · sửa cầu", color: "#bb793e", art: 0,
+    description: "Đôi tay biến đống đổ nát thành nơi trú chân.",
+    passive: "Tay nghề: thu thập tối đa 2 đá mỗi lần, vẫn tiêu hao nguồn đá.",
+    skills: ["Q · Gom vật liệu: lấy tối đa 6 vật liệu từ các nguồn trong 2 ô. Hồi 30 giây.", "R · Tập trung: thu thập cách nhau 0,25 giây trong 15 giây. Hồi 60 giây."] },
+  keeper: { name: "Người giữ nguồn", role: "Nước · đất · mùa màng", color: "#698759", art: 1,
+    description: "Giữ dòng nước sạch và gieo lại những mảnh đất cằn.", passive: "Bộ kỹ năng đang được phát triển. Hiện chơi được các hoạt động chung.", skills: [] },
+  pathfinder: { name: "Người dẫn đường", role: "Khám phá · vận chuyển", color: "#c69b43", art: 2,
+    description: "Tìm con đường nối những mái nhà còn cách biệt.", passive: "Bộ kỹ năng đang được phát triển. Hiện chơi được các hoạt động chung.", skills: [] },
+  connector: { name: "Người kết nối", role: "Cộng đồng · trao đổi", color: "#6984b2", art: 3,
+    description: "Lắng nghe từng câu chuyện và kéo mọi người lại gần.", passive: "Bộ kỹ năng đang được phát triển. Hiện chơi được các hoạt động chung.", skills: [] },
+};
+export function characterProfile(input) {
+  try {
+  requireThat(input && typeof input === "object" && Object.hasOwn(CLASSES, input.classId), "Hãy chọn một class hợp lệ.");
+  requireThat(typeof input.name === "string", "Hãy đặt tên nhân vật.");
+  const name = input.name.trim().normalize("NFC");
+  requireThat(name.length >= 2 && name.length <= 24 && !/[<>\x00-\x1f\x7f]/.test(name), "Tên cần 2–24 ký tự, không chứa ký tự đặc biệt < >.");
+  return { name, classId: input.classId };
+  } catch (error) { error.status = 400; throw error; }
+}
+export function join(w, id, now, profile) {
+  const character = profile ? characterProfile(profile) : {};
   if (w.players[id]) return;
   w.players[id] = {
     id,
     name: `Người dựng làng ${Object.keys(w.players).length + 1}`,
+    ...character,
     ...POINTS.home,
     bag: { wood: 0, stone: 0, food: 0 },
     lastMove: 0,
@@ -255,7 +332,36 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     "Lệnh không hợp lệ.",
   );
   let message = "";
-  if (cmd.type === "build") {
+  if (cmd.type === "character") {
+    const profile = characterProfile(cmd);
+    near(p, POINTS.home);
+    Object.assign(p, profile);
+    message = `Bạn đã chọn ${CLASSES[p.classId].name}.`;
+  } else if (cmd.type === "skill") {
+    requireThat(p.classId === "builder", "Kỹ năng này dành cho Thợ dựng.");
+    requireThat(["collect", "focus"].includes(cmd.skill), "Kỹ năng không hợp lệ.");
+    requireThat(now >= (p.cooldowns?.[cmd.skill] || 0), "Kỹ năng đang hồi. Hãy chờ một chút.");
+    if (cmd.skill === "focus") {
+      p.focusUntil = now + 15000;
+      p.cooldowns = { ...p.cooldowns, focus: now + 60000 };
+      message = "Tập trung: thu thập nhanh trong 15 giây.";
+    } else {
+      const sources = w.resources.filter(r => r.remaining > 0 && Math.hypot(r.x-p.x, r.z-p.z) <= 2);
+      let capacity = Math.min(6, 40 - Object.values(p.bag).reduce((a,b)=>a+b,0));
+      requireThat(capacity > 0, "Túi đã đầy (40 đơn vị).");
+      requireThat(sources.length > 0, "Cần đứng trong 2 ô quanh nguồn gỗ hoặc đá còn vật liệu.");
+      let total = 0;
+      for (const r of sources) {
+        const amount = Math.min(capacity, r.remaining);
+        r.remaining -= amount; p.bag[r.type] += amount;
+        if (r.type === "wood") w.trees = Math.max(0, w.trees - amount * 0.25);
+        capacity -= amount; total += amount;
+        if (!capacity) break;
+      }
+      p.cooldowns = { ...p.cooldowns, collect: now + 30000 };
+      message = `Đã gom ${total} vật liệu quanh bạn.`;
+    }
+  } else if (cmd.type === "build") {
     const problem = placementProblem(w, playerId, cmd.kind, cmd.x, cmd.z);
     requireThat(!problem, problem);
     const definition = BUILDINGS[cmd.kind];
@@ -323,6 +429,49 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     source[cmd.resource] -= cmd.amount;
     dest[cmd.resource] += cmd.amount;
     message = `Đã ${cmd.direction === "deposit" ? "cất" : "lấy"} ${cmd.amount} ${{ wood: "gỗ", stone: "đá", food: "khẩu phần" }[cmd.resource]}.`;
+  } else if (cmd.type === "glide") {
+    requireThat(Array.isArray(cmd.steps) && cmd.steps.length > 0 && cmd.steps.length <= 64, "Đoạn đường không hợp lệ.");
+    let from = p; const lengths=[];
+    for(const step of cmd.steps) {
+      requireThat(step && typeof step.x === "number" && typeof step.z === "number", "Tọa độ không hợp lệ.");
+      const distance=Math.hypot(step.x-from.x,step.z-from.z);
+      requireThat(distance>0 && distance<=.4 && freeSegment(w,from,step), "Đường đi đã bị chặn.");
+      lengths.push(distance); from=step;
+    }
+    let budget=Math.min(4000,Math.max(0,now-(p.lastMove || now-50))) / 1000 * MOVE_SPEED, count=0;
+    while(count<lengths.length && lengths[count]<=budget+1e-8) budget-=lengths[count++];
+    if(count) {
+      p.x=cmd.steps[count-1].x; p.z=cmd.steps[count-1].z;
+      p.lastMove=now-Math.max(0,budget)/MOVE_SPEED*1000;
+      p.moveSeq=(p.moveSeq||0)+count;
+    }
+  } else if (cmd.type === "walk") {
+    requireThat(
+      Array.isArray(cmd.steps) && cmd.steps.length > 0 && cmd.steps.length <= 8,
+      "Đoạn đường không hợp lệ.",
+    );
+    let x = p.x,
+      z = p.z;
+    for (const step of cmd.steps) {
+      requireThat(
+        step &&
+          Number.isInteger(step.x) &&
+          Number.isInteger(step.z) &&
+          walkable(w, step.x, step.z) &&
+          Math.abs(step.x - x) + Math.abs(step.z - z) === 1,
+        "Đường đi đã bị chặn.",
+      );
+      x = step.x;
+      z = step.z;
+    }
+    const budget = Math.min(1280, Math.max(0, now - (p.lastMove || now - 160)));
+    const count = Math.min(cmd.steps.length, Math.floor(budget / 160));
+    if (count) {
+      p.x = cmd.steps[count - 1].x;
+      p.z = cmd.steps[count - 1].z;
+      p.lastMove = now - (budget - count * 160);
+      p.moveSeq = (p.moveSeq || 0) + count;
+    }
   } else if (cmd.type === "move") {
     requireThat(now - p.lastMove >= 160, "Bạn đang di chuyển quá nhanh.");
     requireThat(
@@ -338,7 +487,7 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     requireThat(r, "Không tìm thấy tài nguyên.");
     near(p, r);
     requireThat(
-      now - p.lastGather >= 500,
+      now - p.lastGather >= (p.classId === "builder" && p.focusUntil > now ? 250 : 500),
       "Đợi một chút trước lần thu thập tiếp theo.",
     );
     requireThat(r.remaining > 0, "Nguồn này đã cạn.");
@@ -346,11 +495,13 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       Object.values(p.bag).reduce((a, b) => a + b, 0) < 40,
       "Túi đã đầy (40 đơn vị).",
     );
-    r.remaining--;
-    p.bag[r.type]++;
+    const amount = Math.min(p.classId === "builder" && r.type === "stone" ? 2 : 1, r.remaining,
+      40 - Object.values(p.bag).reduce((a,b)=>a+b,0));
+    r.remaining -= amount;
+    p.bag[r.type] += amount;
     p.lastGather = now;
     if (r.type === "wood") w.trees = Math.max(0, w.trees - 0.25);
-    message = `Đã nhặt 1 ${r.type === "wood" ? "gỗ" : "đá"}.`;
+    message = `Đã nhặt ${amount} ${r.type === "wood" ? "gỗ" : "đá"}.`;
   } else if (cmd.type === "bridge") {
     near(p, { x: 14, z: 17 });
     requireThat(!w.bridge, "Cầu đã được sửa.");

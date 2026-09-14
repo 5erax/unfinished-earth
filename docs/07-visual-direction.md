@@ -2,7 +2,7 @@
 
 Mục tiêu là một thế giới nhìn từ trên xuống, màu sắc rõ ràng, có thể nhận ra địa hình và hoạt động chỉ trong vài giây. [WorldBox](https://www.superworldbox.com/) là tham chiếu về cảm giác quan sát một thế giới pixel thu nhỏ. Dự án dùng bảng màu, hình vẽ Canvas và giao diện riêng; không nhập hoặc sao chép sprite, logo hay tài sản của WorldBox.
 
-Đợt này thay cách thể hiện prototype hiện có. Quy mô vùng, quy tắc đi lại, công thức xây dựng và quyết định mô phỏng vẫn nằm ở máy chủ; đây chưa phải bộ đồ họa hoàn chỉnh cho MVP.
+Đợt này thay cách thể hiện prototype hiện có và giữ di chuyển liên tục của bản cập nhật gameplay. Quy mô vùng, quy tắc đi lại, công thức xây dựng và quyết định mô phỏng vẫn nằm ở máy chủ; đây chưa phải bộ đồ họa hoàn chỉnh cho MVP.
 
 ## Màu sắc và cách đọc địa hình
 
@@ -32,7 +32,7 @@ Bản đồ chiếm diện tích chính. Thông tin thế giới gọn ở phầ
 
 Dùng **phông hệ thống hỗ trợ đầy đủ dấu tiếng Việt** cho nội dung và nút; hiệu ứng pixel thuộc về cảnh game. Tên địa điểm có thể bật/tắt. Dấu chọn và trạng thái focus phải còn rõ với bàn phím; nhãn hành động cần mô tả cụ thể việc sẽ làm và vật liệu cần dùng.
 
-Gợn nước, nhịp sáng dấu chọn và các chuyển động nhỏ phục vụ việc quan sát. Chuyển động giữa những vị trí đã nhận chỉ làm mượt dữ liệu máy chủ, không tự tạo vị trí đi được hoặc xác nhận kết quả hành động. Không làm rung toàn bản đồ hay dùng hiệu ứng che mất trạng thái. Tôn trọng thiết lập giảm chuyển động của người dùng khi bổ sung hiệu ứng.
+Gợn nước, nhịp sáng dấu chọn và các chuyển động nhỏ phục vụ việc quan sát. Nhân vật di chuyển liên tục bằng tọa độ lẻ trong lưới địa hình; client dự đoán rồi đối chiếu với phần đường được máy chủ xác nhận. Renderer hiển thị các tọa độ này và không tự quyết định vị trí đi được hoặc kết quả hành động. Không làm rung toàn bản đồ hay dùng hiệu ứng che mất trạng thái. Tôn trọng thiết lập giảm chuyển động của người dùng khi bổ sung hiệu ứng.
 
 ## Công việc đồ họa tiếp theo
 
