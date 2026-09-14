@@ -32,10 +32,17 @@ export function createGameServer({
             {
               id,
               name: p.name,
+              classId: p.classId || null,
               x: p.x,
               z: p.z,
               ...(id === player
-                ? { bag: p.bag, discoveries: p.discoveries }
+                ? {
+                    bag: p.bag,
+                    cooldowns: p.cooldowns || {},
+                    focusUntil: p.focusUntil || 0,
+                    discoveries: p.discoveries,
+                    moveSeq: p.moveSeq || 0,
+                  }
                 : {}),
             },
           ]),
@@ -84,6 +91,8 @@ export function createGameServer({
     ["/world-rules.js", ["src/world.js", "text/javascript"]],
     ["/map2d.js", ["public/map2d.js", "text/javascript"]],
     ["/motion.js", ["public/motion.js", "text/javascript"]],
+    ["/characters-v1.png", ["public/characters-v1.png", "image/png"]],
+    ["/world-sprites.png", ["public/world-sprites.png", "image/png"]],
     ["/command-journal.js", ["public/command-journal.js", "text/javascript"]],
     ["/", ["public/index.html", "text/html"]],
     ["/app.js", ["public/app.js", "text/javascript"]],
@@ -179,7 +188,7 @@ export function createGameServer({
         const token = randomBytes(32).toString("hex"),
           id = randomBytes(8).toString("hex");
         const w = structuredClone(store.world);
-        join(w, id, now);
+        join(w, id, now, data.character);
         w.revision++;
         // Publish the character and its credential together, or neither.
         store.save(w, undefined, {

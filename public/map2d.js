@@ -1,3 +1,4 @@
+import { CLASSES } from "/world-rules.js";
 // A functional isometric map for browsers without WebGL. Uses the same server state.
 export class Map2D {
   constructor(container, choose, travel) {
@@ -9,40 +10,65 @@ export class Map2D {
     );
     container.replaceChildren(this.canvas);
     this.ctx = this.canvas.getContext("2d");
+    this.characters = new Image();
+    this.characters.src = "/characters-v1.png";
+    this.characters.onload = () => { if (this.state) this.draw(this.state, this.selected, this.angle, this.preview); };
+    this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    this.actorMotion = new Map();
+    this.art = new Image();
+    this.art.src = "/world-sprites.png";
+    this.art.onload = () => {
+      const mask=document.createElement("canvas"); mask.width=this.art.naturalWidth; mask.height=this.art.naturalHeight;
+      const context=mask.getContext("2d",{willReadFrequently:true}); context.drawImage(this.art,0,0);
+      this.artPixels=context.getImageData(0,0,mask.width,mask.height);
+      if (this.state)
+        this.draw(this.state, this.selected, this.angle, this.preview);
+    };
     this.canvas.addEventListener("click", (e) => {
       if (!this.state) return;
       const r = this.canvas.getBoundingClientRect(),
         px = e.clientX - r.left,
         py = e.clientY - r.top;
-      const close = this.targets
-        .map((t) => ({ ...t, d: Math.hypot(t.px - px, t.py - py) }))
-        .sort((a, b) => a.d - b.d)[0];
-      if (close && close.d < Math.max(18, this.tile * 1.8)) {
-        choose(close.id);
+      const hit = (this.hitRects || [])
+        .slice()
+        .reverse()
+        .find(
+          (t) => {
+            if(px<t.left || px>t.right || py<t.top || py>t.bottom) return false;
+            if(!this.artPixels) return true;
+            const ix=Math.floor(t.sx+(px-t.drawX)/t.size*t.sw), iz=Math.floor(t.sy+(py-t.drawY)/t.size*t.sh);
+            return (this.artPixels.data[(iz*this.artPixels.width+ix)*4+3] || 0)>40;
+          },
+        );
+      if (hit) {
+        choose(hit.id);
         return;
       }
-      const a = (px - this.w / 2) / this.tile,
-        b = (py - this.h * 0.48) / (this.tile * 0.5);
+      const groundTarget=this.targets.find(t => !(this.hitRects || []).some(r=>r.id===t.id) &&
+        Math.hypot((px-t.px)/this.tile,(py-t.py)/(this.tile*.5))<.8);
+      if(groundTarget) {choose(groundTarget.id);return;}
+      const a = (px - this.w * 0.53) / this.tile,
+        b = (py - this.h * 0.51) / (this.tile * 0.5);
       const rx = (a + b) / 2,
         rz = (b - a) / 2;
       const c = Math.cos(this.angle),
         s = Math.sin(this.angle);
       travel({
-        x: Math.round(rx * c + rz * s + 16),
-        z: Math.round(-rx * s + rz * c + 16),
+        x: rx * c + rz * s + this.cx,
+        z: -rx * s + rz * c + this.cz,
       });
     });
   }
   project(x, z, height = 0) {
-    x -= 16;
-    z -= 16;
+    x -= this.cx ?? 16;
+    z -= this.cz ?? 16;
     const c = Math.cos(this.angle),
       s = Math.sin(this.angle),
       rx = x * c - z * s,
       rz = x * s + z * c;
     return [
-      this.w / 2 + (rx - rz) * this.tile,
-      this.h * 0.48 + (rx + rz) * this.tile * 0.5 - height * this.tile,
+      this.w * 0.53 + (rx - rz) * this.tile,
+      this.h * 0.51 + (rx + rz) * this.tile * 0.5 - height * this.tile,
     ];
   }
   poly(points, color, stroke) {
@@ -60,10 +86,10 @@ export class Map2D {
   tileAt(x, z, color, height = 0) {
     this.poly(
       [
-        [x - 0.5, z - 0.5],
-        [x + 0.5, z - 0.5],
-        [x + 0.5, z + 0.5],
-        [x - 0.5, z + 0.5],
+        [x - 0.51, z - 0.51],
+        [x + 0.51, z - 0.51],
+        [x + 0.51, z + 0.51],
+        [x - 0.51, z + 0.51],
       ].map(([a, b]) => this.project(a, b, height)),
       color,
     );
@@ -82,17 +108,31 @@ export class Map2D {
   }
   draw(state, selected, angle = 0, preview = null) {
     this.state = state;
+    this.selected = selected;
+    this.preview = preview;
     this.angle = angle;
     this.w = this.container.clientWidth;
     this.h = this.container.clientHeight;
-    this.tile = Math.min(18, this.w / 69, this.h / 43);
+    this.tile = this.overview
+      ? Math.min(this.w / 66, this.h / 38)
+      : this.w < 760
+        ? 30
+        : 38;
+    const focus = state?.players?.[state.you];
+    this.cx = this.overview ? 16 : (focus?.x ?? 16);
+    this.cz = this.overview ? 16 : (focus?.z ?? 16);
     const dpr = Math.min(devicePixelRatio, 2);
-    this.canvas.width = this.w * dpr;
-    this.canvas.height = this.h * dpr;
+    if (
+      this.canvas.width !== this.w * dpr ||
+      this.canvas.height !== this.h * dpr
+    ) {
+      this.canvas.width = this.w * dpr;
+      this.canvas.height = this.h * dpr;
+    }
     this.canvas.style.width = this.w + "px";
     this.canvas.style.height = this.h + "px";
     const c = this.ctx;
-    c.scale(dpr, dpr);
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
     const bg = c.createRadialGradient(
       this.w / 2,
       this.h / 2,
@@ -101,11 +141,12 @@ export class Map2D {
       this.h / 2,
       this.w * 0.7,
     );
-    bg.addColorStop(0, "#668477");
-    bg.addColorStop(1, "#213d3e");
+    bg.addColorStop(0, "#3f7152");
+    bg.addColorStop(1, "#122e2a");
     c.fillStyle = bg;
     c.fillRect(0, 0, this.w, this.h);
     this.targets = [];
+    this.hitRects = [];
     for (let x = 0; x < 32; x++)
       for (let z = 0; z < 32; z++)
         this.tileAt(
@@ -113,12 +154,37 @@ export class Map2D {
           z,
           x >= 15 && x <= 17
             ? z % 3
-              ? "#6faeae"
-              : "#76b7b5"
-            : ["#768959", "#7b8e60", "#728651", "#839263"][
-                (x * 13 + z * 7) % 4
+              ? "#398d94"
+              : "#42999b"
+            : ["#678750", "#6c8b53", "#698951", "#63834d"][
+                Math.abs(
+                  Math.floor(Math.sin(x * 0.48) + Math.cos(z * 0.41) + 2),
+                ) % 4
               ],
         );
+    for (let i = 0; i < 210; i++) {
+      const x = ((i * 17) % 310) / 10,
+        z = ((i * 29) % 310) / 10;
+      if (x >= 14.6 && x <= 17.6) continue;
+      const [px, py] = this.project(x, z);
+      c.strokeStyle = i % 2 ? "#9bb26d55" : "#385f3540";
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(px, py);
+      c.lineTo(px - 2, py - 4);
+      c.moveTo(px, py);
+      c.lineTo(px + 3, py - 3);
+      c.stroke();
+    }
+    for (let z = 0; z < 32; z += 0.6) {
+      const [x, y] = this.project(15.5 + (z % 1), z);
+      c.strokeStyle = "#c1e3cb35";
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(x - 6, y);
+      c.lineTo(x + 9, y + 3);
+      c.stroke();
+    }
     for (let z = 8; z <= 22; z++) this.tileAt(7, z, "#b8ab79");
     for (let x = 7; x <= 25; x++)
       if (x < 15 || x > 17 || state?.bridge)
@@ -138,6 +204,23 @@ export class Map2D {
         preview.valid ? "#c3df8b" : "#e19982",
         0.05,
       );
+    if (this.destination) {
+      const [dx,dy]=this.project(this.destination.x,this.destination.z);
+      c.strokeStyle="#ffe4a1";c.lineWidth=2;c.beginPath();c.ellipse(dx,dy,this.tile*.28,this.tile*.14,0,0,Math.PI*2);c.stroke();
+    }
+    if (this.route?.length) {
+      c.strokeStyle = "#f5d79488";
+      c.lineWidth = 3;
+      c.setLineDash([3, 7]);
+      c.beginPath();
+      const p = state.players[state.you];
+      [p, ...this.route].forEach((v, i) => {
+        const [x, y] = this.project(v.x, v.z);
+        i ? c.lineTo(x, y) : c.moveTo(x, y);
+      });
+      c.stroke();
+      c.setLineDash([]);
+    }
     const add = (id, x, z, label) => {
       const [px, py] = this.project(x, z);
       this.targets.push({ id, x, z, px, py, label });
@@ -165,7 +248,7 @@ export class Map2D {
     }
     for (const b of state?.buildings || []) {
       add(b.id, b.x, b.z, b.kind === "house" ? "Nhà nhỏ" : "Kho cá nhân");
-      objects.push({ ...b, kind: "house" });
+      objects.push({ ...b });
     }
     objects.sort(
       (a, b) => this.project(a.x, a.z)[1] - this.project(b.x, b.z)[1],
@@ -173,27 +256,65 @@ export class Map2D {
     for (const o of objects) {
       const [x, y] = this.project(o.x, o.z),
         t = this.tile;
+      if (this.art.complete && this.art.naturalWidth) {
+        add(o.id, o.x, o.z);
+        const col =
+          o.kind === "stone" || o.kind === "storehouse" || o.id === "depot"
+            ? 1
+            : 0;
+        const row = o.kind === "house" || o.kind === "storehouse" ? 1 : 0;
+        const size =
+          t * (o.kind === "wood" ? 4.1 : o.kind === "stone" ? 2.2 : 4.2);
+        const sw = this.art.naturalWidth / 2,
+          sh = this.art.naturalHeight / 2;
+        c.drawImage(
+          this.art,
+          col * sw,
+          row * sh,
+          sw,
+          sh,
+          x - size * 0.5,
+          y - size * 0.93,
+          size,
+          size,
+        );
+        this.hitRects.push({
+          id: o.id, sx: col*sw, sy: row*sh, sw, sh, size, drawX:x-size*.5, drawY:y-size*.93,
+          left: x - size * 0.38,
+          right: x + size * 0.38,
+          top: y - size * 0.85,
+          bottom: y + size * 0.03,
+        });
+        continue;
+      }
       add(o.id, o.x, o.z);
+      c.fillStyle = "#173a2638";
+      c.beginPath();
+      c.ellipse(
+        x + t * 0.35,
+        y + t * 0.18,
+        t * 0.75,
+        t * 0.33,
+        -0.3,
+        0,
+        Math.PI * 2,
+      );
+      c.fill();
       if (o.kind === "wood") {
-        c.fillStyle = "#665a3f";
-        c.fillRect(x - t * 0.1, y - t * 0.8, t * 0.2, t * 0.9);
-        this.poly(
-          [
-            [x, y - t * 2.8],
-            [x - t * 0.8, y - t * 0.5],
-            [x + t * 0.8, y - t * 0.5],
-          ],
-          "#345f48",
-        );
-        this.poly(
-          [
-            [x, y - t * 2.8],
-            [x, y - t * 0.5],
-            [x + t * 0.8, y - t * 0.5],
-          ],
-          "#477552",
-        );
-      } else if (o.kind === "house") {
+        c.fillStyle = "#725635";
+        c.fillRect(x - t * 0.09, y - t * 0.85, t * 0.18, t * 0.95);
+        for (const [dx, dy, r, color] of [
+          [0.05, -1.1, 0.78, "#204d33"],
+          [-0.3, -1.7, 0.75, "#2f643e"],
+          [0.28, -1.85, 0.7, "#3c7848"],
+          [-0.12, -2.25, 0.6, "#60934f"],
+        ]) {
+          c.fillStyle = color;
+          c.beginPath();
+          c.arc(x + dx * t, y + dy * t, r * t, 0, Math.PI * 2);
+          c.fill();
+        }
+      } else if (o.kind === "house" || o.kind === "storehouse") {
         this.poly(
           [
             [x - t, y - t * 0.1],
@@ -203,7 +324,7 @@ export class Map2D {
             [x, y - t * 0.8],
             [x - t, y - t * 1.3],
           ],
-          "#cfc49b",
+          "#e0c79b",
         );
         this.poly(
           [
@@ -212,7 +333,7 @@ export class Map2D {
             [x + t, y - t * 1.3],
             [x, y - t * 0.8],
           ],
-          "#adac8b",
+          "#b59369",
         );
         this.poly(
           [
@@ -221,7 +342,7 @@ export class Map2D {
             [x + t * 1.2, y - t * 1.3],
             [x, y - t * 0.7],
           ],
-          o.id === "east" ? "#657d78" : "#9f7352",
+          o.id === "east" ? "#657d78" : "#a65e3a",
         );
         c.fillStyle = "#425750";
         c.fillRect(x - t * 0.5, y - t * 0.5, t * 0.25, t * 0.5);
@@ -239,20 +360,48 @@ export class Map2D {
     }
     for (const [id, p] of Object.entries(state?.players || {})) {
       const [x, y] = this.project(p.x, p.z);
-      c.fillStyle = id === state.you ? "#f5d180" : "#97c4cf";
+      const t = this.tile;
+      c.fillStyle = "#092c2455";
       c.beginPath();
-      c.arc(
-        x,
-        y - this.tile * 0.4,
-        Math.max(3, this.tile * 0.3),
-        0,
-        Math.PI * 2,
-      );
+      c.ellipse(x, y + t * 0.13, t * 0.3, t * 0.14, 0, 0, Math.PI * 2);
       c.fill();
-      c.strokeStyle = "#203c35";
-      c.lineWidth = 2;
-      c.stroke();
-      if (id === state.you) this.label("Bạn", x, y - this.tile * 1.5);
+      if (id === state.you) {
+        c.strokeStyle = "#f4da89";
+        c.lineWidth = 2;
+        c.beginPath();
+        c.ellipse(x, y + t * 0.1, t * 0.42, t * 0.21, 0, 0, Math.PI * 2);
+        c.stroke();
+      }
+      if (this.characters.complete && this.characters.naturalWidth && p.classId && CLASSES[p.classId]) {
+        const i = CLASSES[p.classId].art, size = this.characters.naturalWidth / 2;
+        const old = this.actorMotion.get(id), now = performance.now();
+        const moving = old && (Math.abs(p.x-old.x) + Math.abs(p.z-old.z) > 0.001);
+        const face = moving ? (x < old.px ? -1 : 1) : old?.face || 1;
+        const reduced = this.reducedMotion.matches;
+        const bob = moving && !reduced ? Math.sin(now / 75) * t * 0.045 : 0;
+        this.actorMotion.set(id, { x: p.x, z: p.z, px: x, face });
+        c.save(); c.translate(x, y + t * 0.12); c.scale(face, 1);
+        c.drawImage(this.characters, (i % 2) * size, Math.floor(i/2)*size, size, size,
+          -t * 0.82, -t * 1.64 + bob, t * 1.64, t * 1.64);
+        c.restore();
+        if (p.focusUntil > Date.now()) { c.strokeStyle = "#ffd77a"; c.beginPath(); c.ellipse(x,y,t*.52,t*.26,0,0,Math.PI*2); c.stroke(); }
+        continue;
+      }
+      c.fillStyle = "#263d35";
+      c.fillRect(x - t * 0.16, y - t * 0.2, t * 0.12, t * 0.35);
+      c.fillRect(x + t * 0.04, y - t * 0.2, t * 0.12, t * 0.35);
+      c.fillStyle = id === state.you ? "#df9f48" : "#76aab6";
+      c.beginPath();
+      c.roundRect(x - t * 0.22, y - t * 0.67, t * 0.44, t * 0.53, t * 0.1);
+      c.fill();
+      c.fillStyle = "#e9caa0";
+      c.beginPath();
+      c.arc(x, y - t * 0.87, t * 0.2, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#594333";
+      c.beginPath();
+      c.arc(x, y - t * 0.93, t * 0.22, Math.PI, 2 * Math.PI);
+      c.fill();
     }
     for (const n of state?.npcs || []) {
       const village = points.find((p) => p[0] === n.village),
@@ -283,12 +432,12 @@ export class Map2D {
     for (const t of this.targets)
       if (
         t.label &&
-        (!["gate", "farm", "depot"].includes(t.id) || t.id === selected)
+        (t.id === selected ||
+          (this.overview && ["east", "west", "bridge"].includes(t.id)))
       )
         this.label(t.label, t.px, t.py + this.tile * 1.6);
     c.font = "12px system-ui";
     c.textAlign = "center";
     c.fillStyle = "#d7e2ca";
-    c.fillText("CHẾ ĐỘ TƯƠNG THÍCH · BẢN ĐỒ ĐẲNG CỰ", this.w / 2, this.h - 114);
   }
 }
