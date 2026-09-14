@@ -173,11 +173,12 @@ export function createGameServer({
         const w = structuredClone(store.world);
         join(w, id, now);
         w.revision++;
-        // A failed session insert cannot ACK a playable session; the orphan player owns no assets.
-        store.save(w);
-        store.db
-          .prepare("INSERT INTO sessions VALUES(?,?,?)")
-          .run(digest(token), id, now + 30 * 86400000);
+        // Publish the character and its credential together, or neither.
+        store.save(w, undefined, {
+          token: digest(token),
+          player: id,
+          expires: now + 30 * 86400000,
+        });
         seen.set(id, now);
         res.setHeader(
           "Set-Cookie",
