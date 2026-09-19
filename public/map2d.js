@@ -1,6 +1,8 @@
 // Original code-drawn pixel art; the camera never mutates authoritative world state.
 const TILE = 24;
 const PAD = 72;
+const DAY_MS = 1_800_000;
+const CLASS_COLORS = {builder:'#c78a4c',keeper:'#78a868',pathfinder:'#e0b65b',connector:'#819fce'};
 const LANDMARKS = [
   ['home',7,22,'Nơi trú ẩn'], ['bridge',16,17,'Cầu qua sông'],
   ['gate',14,10,'Cống tưới'], ['farm',10,12,'Ruộng chung'],
@@ -41,6 +43,7 @@ export class Map2D {
     this.ctx=this.canvas.getContext('2d',{alpha:false});
     this.choose=choose; this.travel=travel;
     this.zoom=1; this.center={x:15.5,z:15.5}; this.showLabels=true; this.targets=[];
+    this.animationTime=0;this.lastAnimationAt=null;this.actorPositions=new Map();
     this.reducedMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)');
     this.terrain=this.makeTerrain();
     this.layer=document.createElement('canvas');
@@ -181,12 +184,51 @@ export class Map2D {
     }
     rect(c,x-17,y-32,32,7,'#899780');rect(c,x-17,y-34,32,3,'#b4bca0');rect(c,x-3,y-33,4,7,'#70836b');rect(c,x+23,y+11,7,5,'#aab397');
   }
-  person(c,x,y,color,you=false,phase=0){
+  person(c,x,y,color,you=false,phase=0,role='',hungry=false){
     x=Math.round(x);y=Math.round(y);rect(c,x-4,y+1,9,3,'#355c4260');
     if(you){rect(c,x-5,y+1,11,1,'#ffe19a');rect(c,x-6,y-1,1,3,'#ffe19a');rect(c,x+6,y-1,1,3,'#ffe19a');}
-    rect(c,x-2,y-2,2,4,'#4f5144');rect(c,x+1,y-2,2,4,'#4f5144');rect(c,x-3,y-7,7,6,color);
+    rect(c,x-2,y-2,2,4+phase,'#4f5144');rect(c,x+1,y-2,2,4-phase,'#4f5144');rect(c,x-3,y-7,7,6,color);
     rect(c,x-4,y-6+phase,1,4,'#ddb98b');rect(c,x+4,y-6-phase,1,4,'#ddb98b');rect(c,x-2,y-12,5,5,'#e2bb89');
     rect(c,x-3,y-14,6,3,you?'#8a5735':'#766644');rect(c,x+1,y-10,1,1,'#574b3a');if(!you)rect(c,x-4,y-12,9,1,'#cbbb78');
+    if(role==='builder'){
+      rect(c,x-4,y-13,8,2,'#d9b77a');rect(c,x-2,y-16,5,3,'#ebc98b');
+      rect(c,x-2,y-6,4,5,'#866343');rect(c,x+5,y-9+phase,1,8,'#85603b');rect(c,x+3,y-10+phase,5,3,'#c2cdc0');
+    }else if(role==='keeper'){
+      rect(c,x-3,y-14,6,3,'#47744f');rect(c,x-4,y-12,9,1,'#a9c580');
+      rect(c,x+4,y-3+phase,5,4,'#9da49b');rect(c,x+5,y-5+phase,3,1,'#d6d9bc');rect(c,x+8,y-4+phase,3,1,'#b9c7b0');
+    }else if(role==='pathfinder'){
+      rect(c,x-4,y-8,3,7,'#80623d');rect(c,x-3,y-14,6,3,'#b8904d');rect(c,x-5,y-12,10,1,'#e2c77d');
+      rect(c,x+6,y-10,1,13,'#79603f');rect(c,x+5,y-11,3,2,'#d4c493');
+    }else if(role==='connector'){
+      rect(c,x-3,y-8,7,2,'#e8c87d');rect(c,x+2,y-6,2,4,'#e8c87d');
+      rect(c,x+4,y-3+phase,4,4,'#926748');rect(c,x+4,y-3+phase,4,1,'#d5ac69');
+    }else if(role==='fisher'){
+      rect(c,x-4,y-13,9,2,'#dccb89');rect(c,x-2,y-15,5,2,'#b9a865');
+      rect(c,x+6,y-17,1,19,'#8a693c');rect(c,x+7,y-17,4,1,'#d5ddbf');rect(c,x+10,y-16,1,7,'#d5ddbf');
+      rect(c,x-7,y-3,3,4,'#a4b4a5');
+    }else if(role==='farmer'){
+      rect(c,x-5,y-12,11,2,'#d5bf79');rect(c,x-2,y-15,5,3,'#e8d291');
+      rect(c,x+6,y-11,1,13,'#85603b');rect(c,x+4,y-12,5,2,'#b7c1ad');rect(c,x-2,y-6,4,5,'#89754c');
+    }
+    if(hungry){
+      rect(c,x-4,y-24,9,7,'#513e33');rect(c,x-3,y-23,7,5,'#edbd73');
+      rect(c,x-1,y-22,3,1,'#704b32');rect(c,x,y-21,1,2,'#704b32');
+    }
+  }
+  cart(c,x,y,cart,time){
+    c.save();c.translate(Math.round(x),Math.round(y));
+    // Heading points in travel direction; the handle is the front of the cart.
+    if(Number.isFinite(cart.heading))c.rotate(Math.round((cart.heading-Math.PI/2)/(Math.PI/2))*Math.PI/2);
+    rect(c,-13,-3,29,11,'#355c4260');rect(c,-10,-7,22,12,'#70583c');rect(c,-8,-10,18,11,'#c3a367');
+    for(let j=0;j<4;j++)rect(c,-7+j*5,-9,1,9,'#997b4d');
+    rect(c,-12,-4,4,9,'#394c44');rect(c,10,-4,4,9,'#394c44');
+    const spoke=cart.moving&&time?Math.floor(time*7)%2:0;
+    rect(c,-11,-1+spoke,2,2,'#c6ae7d');rect(c,11,-1-spoke,2,2,'#c6ae7d');rect(c,-2,4,3,9,'#88673e');
+    if(cart.cargo>0){rect(c,-6,-15,8,9,'#cfbc7d');rect(c,2,-13,7,7,'#e2ce91');rect(c,-5,-14,6,1,'#eee0a6');}
+    c.restore();
+    if(cart.paused||cart.status==='blocked'){
+      rect(c,x+10,y-20,8,8,'#513e33');rect(c,x+12,y-18,1,4,'#edbd73');rect(c,x+15,y-18,1,4,'#edbd73');
+    }
   }
   label(text,x,y,selected=false,village=false){
     const c=this.ctx;c.font=`${village?'600 12':'500 11'}px system-ui, sans-serif`;
@@ -206,7 +248,9 @@ export class Map2D {
     // scene with nearest-neighbour sampling. Labels stay at readable CSS size.
     const c=this.layerContext;c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,this.layer.width,this.layer.height);
     const [ox,oy]=this.project(-.5,-.5),scale=this.tile/TILE;c.save();c.translate(PAD,PAD);c.drawImage(this.terrain,-PAD,-PAD);
-    const time=this.reducedMotion?.matches?0:performance.now()/1000;
+    const now=performance.now(),elapsed=this.lastAnimationAt===null?0:Math.min(.05,Math.max(0,(now-this.lastAnimationAt)/1000));
+    this.lastAnimationAt=now;if(!this.reducedMotion?.matches)this.animationTime+=elapsed;
+    const time=this.reducedMotion?.matches?0:this.animationTime;
     for(let i=0;i<27;i++)rect(c,15*TILE+5+Math.floor(noise(i,1)*59),(i*31+Math.floor(time*3))%(32*TILE),5+i%4,1,i%3?'#71b9bd70':'#b1d7c680');
     const crop=clamp(state?.crop||0,0,1),fx=9*TILE,fy=11*TILE;
     rect(c,fx-2,fy-2,TILE*3+4,TILE*3+4,'#b4ae71');rect(c,fx,fy,TILE*3,TILE*3,state?.gate?'#685d3c':'#817044');
@@ -239,6 +283,16 @@ export class Map2D {
       const end=route.at(-1),x=(end.x+.5)*TILE,y=(end.z+.5)*TILE;
       rect(c,x-4,y-1,9,2,'#fff0ba');rect(c,x-1,y-4,2,9,'#fff0ba');
     }
+    const cart=state?.cart;
+    if(selected==='depot'&&Array.isArray(cart?.route)&&cart.route.length>1){
+      c.save();c.strokeStyle=cart.paused?'#dca874b3':'#eff0c29c';c.lineWidth=2;c.setLineDash([3,6]);c.beginPath();
+      let started=false;
+      for(const p of cart.route){
+        if(!Number.isFinite(p.x)||!Number.isFinite(p.z))continue;
+        if(started)c.lineTo((p.x+.5)*TILE,(p.z+.5)*TILE);else{c.moveTo((p.x+.5)*TILE,(p.z+.5)*TILE);started=true;}
+      }
+      c.stroke();c.restore();
+    }
     const objects=[];
     for(const [id,x,z] of LANDMARKS){
       if(['west','east'].includes(id)){
@@ -260,41 +314,53 @@ export class Map2D {
       }
     }
     for(const b of state?.buildings||[]){this.targets.push({id:b.id,x:b.x,z:b.z,label:b.kind==='house'?'Nhà nhỏ':'Kho cá nhân'});objects.push({id:b.id,kind:'house',x:b.x,z:b.z,variant:b.kind==='storehouse'?1:0});}
-    if(state?.cart)objects.push({id:'depot',kind:'cart',x:state.cart.cargo?18:12,z:state.cart.cargo?17:18.2,cargo:state.cart.cargo});
+    if(cart){
+      const x=Number.isFinite(cart.x)?cart.x:11,z=Number.isFinite(cart.z)?cart.z:19;
+      objects.push({...cart,id:'depot',kind:'cart',x,z});
+    }
     for(const n of state?.npcs||[]){
       const v=LANDMARKS.find(p=>p[0]===n.village);if(!v)continue;
       const i=Number(n.id?.split('-').at(-1))||1,a=i*2.4,d=1.5+(i%3)*.34;
-      objects.push({kind:'person',x:v[1]+Math.cos(a)*d,z:v[2]+Math.sin(a)*d,color:n.hungryDays>2?'#a58468':i%3?'#b58b54':'#79a1a0',seed:i});
+      // A tiny idle shift is decorative only; village membership comes from the server.
+      const idle=time?Math.sin(time*.55+i)*.035:0,x=v[1]+Math.cos(a)*d+idle,z=v[2]+Math.sin(a)*d;
+      const role=n.job==='Đánh cá'?'fisher':'farmer';
+      this.targets.push({id:n.id,x,z,label:`${n.name} · ${n.job}${n.hungryDays>0?' · Thiếu ăn':''}`});
+      objects.push({id:n.id,kind:'person',x,z,color:n.hungryDays>2?'#a58468':role==='fisher'?'#79a1a0':'#b58b54',seed:i,role,hungry:n.hungryDays>0});
     }
     for(let i=0;i<Math.min(22,Math.max(0,Math.round(state?.grazers??18)));i++){
       const x=2.5+noise(i,4,15)*26,z=3+noise(i,7,15)*25;if(freeDecoration(x,z))objects.push({kind:'sheep',x,z,seed:i});
     }
-    for(const [id,p] of Object.entries(state?.players||{}))objects.push({kind:'person',x:p.x,z:p.z,color:id===state.you?'#efca68':'#72b7c1',you:id===state.you});
+    const actorPositions=new Map();
+    for(const [id,p] of Object.entries(state?.players||{})){
+      const previous=this.actorPositions.get(id),changed=previous&&Math.hypot(p.x-previous.x,p.z-previous.z)>.001;
+      const lastMoved=changed?this.animationTime:previous?.lastMoved??-1;
+      actorPositions.set(id,{x:p.x,z:p.z,lastMoved});
+      objects.push({kind:'person',x:p.x,z:p.z,color:CLASS_COLORS[p.classId]||'#c78a4c',you:id===state.you,role:p.classId||'builder',moving:lastMoved>=0&&this.animationTime-lastMoved<.18,player:true});
+    }
+    this.actorPositions=actorPositions;
     objects.sort((a,b)=>a.z-b.z);
     for(const o of objects){
       const x=(o.x+.5)*TILE,y=(o.z+.5)*TILE;
       if(state&&o.id){
         const size=o.tiny?.8:o.small?.72:1;
-        const box=o.kind==='house'?[-15,-32,18,6]:o.kind==='wood'?[-11,-24,11,3]:o.kind==='ruin'?[-26,-35,31,20]:[-12,-15,18,6];
+        const box=o.kind==='house'?[-15,-32,18,6]:o.kind==='wood'?[-11,-24,11,3]:o.kind==='ruin'?[-26,-35,31,20]:o.kind==='person'?[-7,o.hungry?-25:-19,12,5]:o.kind==='cart'?[-19,-21,19,17]:[-12,-15,18,6];
         this.spriteTargets.push({id:o.id,left:o.x+box[0]*size/TILE,top:o.z+box[1]*size/TILE,right:o.x+box[2]*size/TILE,bottom:o.z+box[3]*size/TILE});
       }
       if(o.kind==='wood')this.tree(c,x,y,o.seed,o.small);
       else if(o.kind==='stone')this.stone(c,x,y,o.seed);
       else if(o.kind==='house')this.house(c,x,y,o.variant,o.tiny);
       else if(o.kind==='ruin')this.ruin(c,x,y);
-      else if(o.kind==='person')this.person(c,x,y,o.color,o.you,time?Math.floor(time*2+(o.seed||0))%2:0);
-      else if(o.kind==='cart'){
-        rect(c,x-10,y-7,22,12,'#70583c');rect(c,x-8,y-10,18,11,'#c3a367');
-        for(let j=0;j<4;j++)rect(c,x-7+j*5,y-9,1,9,'#997b4d');
-        rect(c,x-12,y-4,4,9,'#394c44');rect(c,x+10,y-4,4,9,'#394c44');
-        rect(c,x-11,y-1,2,2,'#b39b69');rect(c,x+11,y-1,2,2,'#b39b69');
-        rect(c,x-2,y+4,3,9,'#88673e');
-        if(o.cargo){rect(c,x-6,y-15,8,9,'#cfbc7d');rect(c,x+2,y-13,7,7,'#e2ce91');}
-      }
+      else if(o.kind==='person')this.person(c,x,y,o.color,o.you,time&&(!o.player||o.moving)?Math.floor(time*(o.player?7:1.2)+(o.seed||0))%2:0,o.role,o.hungry);
+      else if(o.kind==='cart')this.cart(c,x,y,o,time);
       else if(o.kind==='sheep'){
         rect(c,x-4,y,11,3,'#456c4160');rect(c,x-3,y-1,2,4,'#766d50');rect(c,x+3,y-1,2,4,'#766d50');
         rect(c,x-5,y-6,10,6,'#d4d3b1');rect(c,x-3,y-8,6,7,'#eee8c8');rect(c,x+4,y-5,4,4,'#887f62');rect(c,x+7,y-5,1,1,'#414d3c');
       }
+    }
+    if(state&&Number.isFinite(state.dayProgress)){
+      const day=((state.dayProgress/DAY_MS)%1+1)%1,daylight=Math.max(0,Math.cos((day-.3)*Math.PI*2));
+      c.fillStyle=`rgba(33,48,79,${(.12*(1-daylight)).toFixed(3)})`;c.fillRect(-PAD,-PAD,this.layer.width,this.layer.height);
+      if(day<.12||day>.64&&day<.8){c.fillStyle='rgba(237,179,110,0.035)';c.fillRect(-PAD,-PAD,this.layer.width,this.layer.height);}
     }
     const chosen=this.targets.find(t=>t.id===selected);
     const outline=(x,z,color)=>{
@@ -315,6 +381,10 @@ export class Map2D {
       if(!state){const [x,y]=this.project(7,23.8);this.label('Nơi câu chuyện bắt đầu',x,y);}
     }
     if(chosen&&this.showLabels){const [x,y]=this.project(chosen.x,chosen.z-1.8);this.label(chosen.label,x,y,true);}
+    if(cart&&selected==='depot'&&this.showLabels&&Number.isFinite(cart.x)&&Number.isFinite(cart.z)){
+      const [x,y]=this.project(cart.x,cart.z+1.35),status=cart.paused||cart.status==='blocked'?'Đang chờ':cart.leg==='return'?'Về kho':cart.moving?'Đang giao':'Tại kho';
+      this.label(`Xe hàng · ${Math.max(0,Math.floor(cart.cargo||0))} lương thực · ${status}`,x,y,true);
+    }
     if(player&&this.showLabels){const [x,y]=this.project(player.x,player.z+1.05);this.label('Bạn',x,y,true);}
   }
 }

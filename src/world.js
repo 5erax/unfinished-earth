@@ -18,9 +18,8 @@ export const BUILDINGS = {
   storehouse: { name: "Kho cá nhân", wood: 4, stone: 2, capacity: 80 },
 };
 export function housingCapacity(w, village) {
-  if (!w.housingBase) return null;
   return (
-    w.housingBase[village] +
+    (w.housingBase?.[village] ?? Math.max(12, w.npcs.filter((n) => n.village === village).length)) +
     (w.buildings || []).filter(
       (b) => b.kind === "house" && b.village === village,
     ).length *
@@ -156,7 +155,9 @@ export function createWorld(now = Date.now()) {
     weather: "Nắng",
     crop: 0,
     depot: 24,
-    cart: { cargo: 0, progress: 0, status: "blocked" },
+    cart: { cargo: 0, progress: 0, status: "blocked", target: "east", paused: false,
+      leg: "outbound", travelMs: 2 * DAY_MS, route: [], routeDistance: 0, distance: 0, motionVersion: 1 },
+    housingBase: { west: 12, east: 12 },
     villages: [
       { id: "west", name: "Làng Thượng", food: 72 },
       { id: "east", name: "Làng Hạ", food: 18 },
@@ -323,6 +324,189 @@ export function join(w, id, now, profile) {
     seen: now,
     discoveries: [],
   };
+}
+
+function cartRoad(target) {
+  // The cart follows the same reserved roads and narrow bridge as players.
+  return target === "west"
+    ? [POINTS.depot, { x: 11, z: 17 }, { x: 7, z: 17 }, { x: 7, z: 8 }, POINTS.west].map(p => ({ ...p }))
+    : [POINTS.depot, { x: 11, z: 17 }, { x: 24, z: 17 }, POINTS.east].map(p => ({ ...p }));
+}
+function roadLength(route) {
+  return route.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - route[i].x, p.z - route[i].z), 0);
+}
+function pointOnRoad(route, distance) {
+  let remaining = Math.max(0, distance);
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1], b = route[i], length = Math.hypot(b.x - a.x, b.z - a.z);
+    if (remaining < length - 1e-9 || i === route.length - 1) {
+      const t = length ? Math.min(1, remaining / length) : 0;
+      return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t,
+        heading: Math.atan2(b.z - a.z, b.x - a.x), segment: i };
+    }
+    remaining -= length;
+  }
+  return { ...POINTS.depot, heading: -Math.PI / 2, segment: 1 };
+}
+function readCartRoute(cart) {
+  if (Array.isArray(cart?.route) && cart.route.length > 1) return cart.route;
+  const route = cartRoad(cart?.target === "west" ? "west" : "east");
+  return cart?.leg === "return" ? route.reverse() : route;
+}
+export function cartPosition(w) {
+  const cart = w.cart || {}, route = readCartRoute(cart), length = roadLength(route);
+  const distance = Number.isFinite(cart.distance) ? cart.distance
+    : Math.max(0, Math.min(1, (cart.progress || 0) / 2)) * length;
+  const { x, z, heading } = pointOnRoad(route, distance);
+  return { x, z, heading, moving: !cart.paused && ["transit", "returning"].includes(cart.status) };
+}
+function prepareCart(w) {
+  const cart = w.cart ??= { cargo: 0, progress: 0, status: "ready" };
+  cart.target = cart.target === "west" ? "west" : "east";
+  cart.paused = cart.paused === true;
+  cart.leg = cart.leg === "return" ? "return" : "outbound";
+  cart.travelMs = Number.isFinite(cart.travelMs) && cart.travelMs > 0 ? cart.travelMs : 2 * DAY_MS;
+  cart.dockMs ??= cart.cargo > 0 || cart.leg === "return" ? 0 : DAY_MS / 8;
+  if (!cart.motionVersion) {
+    // Old saves count 0/1/2 daily travel steps. Conversion moves no inventory.
+    cart.route = cartRoad(cart.target);
+    cart.routeDistance = roadLength(cart.route);
+    cart.distance = cart.cargo > 0 ? Math.max(0, Math.min(1, (cart.progress || 0) / 2)) * cart.routeDistance : 0;
+    cart.motionVersion = 1;
+  }
+  if (!Array.isArray(cart.route) || cart.route.length < 2) cart.route = readCartRoute(cart);
+  cart.routeDistance = roadLength(cart.route);
+  cart.distance = Math.max(0, Math.min(cart.routeDistance, Number.isFinite(cart.distance) ? cart.distance : 0));
+  cart.progress = cart.routeDistance ? cart.distance / cart.routeDistance : 0;
+  cart.moving = !cart.paused && ["transit", "returning"].includes(cart.status);
+  return cart;
+}
+function takeFoodCauses(holder, key, amount) {
+  let remaining = amount;
+  const causes = [];
+  for (const lot of holder[key] || []) {
+    if (remaining <= 0) break;
+    const used = Math.min(remaining, Math.max(0, lot.amount));
+    lot.amount -= used;
+    remaining -= used;
+    if (used && lot.cause) causes.push(lot.cause);
+  }
+  holder[key] = (holder[key] || []).filter(lot => lot.amount > 0);
+  return [...new Set(causes)];
+}
+function rememberFood(holder, key, amount, cause) {
+  if (amount > 0) (holder[key] ??= []).push({ amount, cause });
+}
+function advanceCart(w, elapsedMs, working) {
+  const cart = prepareCart(w);
+  const stop = status => { cart.status = status; cart.moving = false; };
+  if (cart.paused) return stop("paused");
+  if (!working) return stop("resting");
+  let remainingMs = elapsedMs;
+  while (remainingMs > 0) {
+    if (cart.leg === "outbound" && !cart.cargo) {
+      if (cart.dockMs > 0) {
+        const loadingTime = Math.min(remainingMs, cart.dockMs);
+        cart.dockMs -= loadingTime;
+        remainingMs -= loadingTime;
+        stop(w.depot > 0 ? "ready" : "empty");
+        if (remainingMs <= 0) return;
+      }
+      const amount = Math.min(8, w.depot);
+      if (amount <= 0) return stop("empty");
+      const causes = takeFoodCauses(w, "depotFoodLots", amount);
+      w.depot -= amount;
+      cart.cargo = amount;
+      cart.route = cartRoad(cart.target);
+      cart.routeDistance = roadLength(cart.route);
+      cart.distance = 0;
+      cart.progress = 0;
+      cart.loadCause = event(w, "logistics", `Xe nhận ${amount} khẩu phần tại kho, lên đường đến ${w.villages.find(v => v.id === cart.target).name}.`, "depot", causes);
+    }
+    const start = pointOnRoad(cart.route, cart.distance);
+    const endOfSegment = cart.route[start.segment];
+    const segmentRemaining = Math.hypot(endOfSegment.x - start.x, endOfSegment.z - start.z);
+    const unitsPerMs = cart.routeDistance / cart.travelMs;
+    const distance = Math.min(segmentRemaining, remainingMs * unitsPerMs);
+    const ratio = segmentRemaining ? distance / segmentRemaining : 1;
+    const destination = { x: start.x + (endOfSegment.x - start.x) * ratio, z: start.z + (endOfSegment.z - start.z) * ratio };
+    if (!freeSegment(w, start, destination)) {
+      // Approach the obstruction without crossing it; cargo stays on this cart.
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 24; i++) {
+        const t = (lo + hi) / 2;
+        const candidate = { x: start.x + (destination.x - start.x) * t, z: start.z + (destination.z - start.z) * t };
+        if (freeSegment(w, start, candidate)) lo = t; else hi = t;
+      }
+      cart.distance += distance * lo;
+      cart.progress = cart.distance / cart.routeDistance;
+      return stop("blocked");
+    }
+    cart.distance += distance;
+    cart.progress = cart.distance / cart.routeDistance;
+    remainingMs = Math.max(0, remainingMs - distance / unitsPerMs);
+    cart.status = cart.leg === "return" ? "returning" : "transit";
+    cart.moving = true;
+    if (cart.distance >= cart.routeDistance - 1e-8) {
+      if (cart.leg === "outbound") {
+        const village = w.villages.find(v => v.id === cart.target), amount = cart.cargo;
+        village.food += amount;
+        const causes = [cart.loadCause, cart.target === "east" ? w.bridgeCause : null].filter(Boolean);
+        const delivery = event(w, "logistics", `Xe giao ${amount} khẩu phần cho ${village.name}, đang quay về kho lấy chuyến tiếp theo.`, village.id, causes);
+        rememberFood(village, "foodLots", amount, delivery);
+        cart.cargo = 0;
+        cart.loadCause = null;
+        w.deliveries++;
+        cart.leg = "return";
+        cart.route = [...cart.route].reverse();
+        cart.status = "returning";
+      } else {
+        cart.leg = "outbound";
+        cart.route = cartRoad(cart.target);
+        cart.dockMs = DAY_MS / 8;
+        cart.status = w.depot > 0 ? "ready" : "empty";
+      }
+      cart.distance = 0;
+      cart.progress = 0;
+      cart.moving = cart.status === "returning";
+    } else if (distance <= 1e-8) {
+      // Avoid getting stuck exactly on a route corner.
+      cart.distance = Math.min(cart.routeDistance, cart.distance + 1e-8);
+    }
+  }
+}
+
+export function settlementSummary(w, id) {
+  const village = w.villages.find(v => v.id === id);
+  if (!village) return null;
+  const people = w.npcs.filter(n => n.village === id);
+  const population = people.length, food = village.food;
+  const hungry = people.filter(n => n.fedToday === false || n.hungryDays > 0).length;
+  const capacity = housingCapacity(w, id);
+  const foodDays = population ? food / population : 0;
+  const reason = hungry ? `${hungry} người thiếu khẩu phần hôm nay. Cần tiếp tế hoặc tăng sản lượng.`
+    : foodDays < 1 ? "Dự trữ chưa đủ một ngày; làng cần chuyến tiếp tế kế tiếp."
+    : capacity <= population ? "Các giường đã có người ở. Xây thêm nhà để đón cư dân."
+    : "Làng còn thức ăn và chỗ ở; có thể đón người từ nơi thiếu ăn.";
+  return { id, name: village.name, population, capacity, food, foodDays,
+    produced: village.daily?.produced ?? 0, consumed: village.daily?.consumed ?? 0,
+    shortage: village.daily?.shortage ?? 0, trend: village.daily?.trend ?? 0, hungry,
+    fishers: people.filter(n => n.job === "Đánh cá").length,
+    farmers: people.filter(n => n.job === "Trồng trọt").length, reason };
+}
+export function worldReport(w) {
+  const issues = [];
+  const settlements = w.villages.map(v => settlementSummary(w, v.id)).sort((a, b) => b.hungry - a.hungry || a.foodDays - b.foodDays);
+  for (const v of settlements) {
+    if (v.hungry) issues.push({ title: `${v.name} thiếu thức ăn`, detail: `${v.hungry}/${v.population} người chưa đủ khẩu phần. Làng còn ${Math.floor(v.food)} khẩu phần.`, target: v.id });
+    else if (v.population && v.foodDays < 1) issues.push({ title: `${v.name} sắp hết dự trữ`, detail: `Còn ${Math.floor(v.food)} khẩu phần cho ${v.population} người. Tiếp tế trước bữa ăn ngày tới.`, target: v.id });
+  }
+  if (w.cart?.status === "blocked") issues.push({ title: "Tuyến vận chuyển bị chặn", detail: `Xe đang giữ ${w.cart.cargo} khẩu phần; hàng vẫn ở trên xe. ${!w.bridge && w.cart.target !== "west" ? "Sửa cầu để nối lại tuyến." : "Cần mở đường trước khi xe tiếp tục."}`, target: !w.bridge && w.cart.target !== "west" ? "bridge" : "depot" });
+  else if (w.cart?.paused) issues.push({ title: "Xe tiếp tế đang tạm dừng", detail: "Đến kho chung và tiếp tục chuyến xe khi bạn sẵn sàng.", target: "depot" });
+  else if (w.depot <= 0 && !w.cart?.cargo) issues.push({ title: "Kho chung đã hết thức ăn", detail: w.crop >= 1 ? "Ruộng đã chín. Thu hoạch để bổ sung chuyến xe." : "Đợi ruộng chín hoặc chuyển thức ăn trong túi vào kho.", target: w.crop >= 1 ? "farm" : "depot" });
+  if (w.fish < 30) issues.push({ title: "Đàn cá đang suy giảm", detail: `Nguồn cá còn ${Math.round(w.fish)}%. ${w.gate ? "Đóng cống một thời gian giúp dòng sông phục hồi." : "Giảm áp lực đánh bắt và chờ nguồn cá phục hồi."}`, target: "gate" });
+  const latest = [...w.events].reverse().find(e => w.day - e.day <= 3 && (e.kind === "build" || e.kind === "logistics" && e.place !== "depot" || e.kind === "food"));
+  return { issues: issues.slice(0, 3), positive: latest ? { title: "Thay đổi gần đây", detail: latest.text, target: latest.place } : null };
 }
 export function applyCommand(w, playerId, cmd, now = Date.now()) {
   const p = w.players[playerId];
@@ -507,7 +691,9 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     requireThat(!w.bridge, "Cầu đã được sửa.");
     spend(p, 8, 4);
     w.bridge = true;
-    w.cart.status = w.cart.cargo ? "transit" : w.depot ? "ready" : "empty";
+    const cart = prepareCart(w);
+    cart.status = cart.paused ? "paused" : cart.leg === "return" ? "returning" : cart.cargo ? "transit" : w.depot ? "ready" : "empty";
+    cart.moving = ["transit", "returning"].includes(cart.status);
     w.bridgeCause = event(
       w,
       "build",
@@ -542,14 +728,39 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     w.depot += yieldCount;
     w.crop = 0;
     w.harvests++;
-    event(
+    const harvestCause = event(
       w,
       "food",
       `Thu hoạch ${yieldCount} khẩu phần, chuyển vào kho chung.`,
       "farm",
       w.gateCause ? [w.gateCause] : [],
     );
+    rememberFood(w, "depotFoodLots", yieldCount, harvestCause);
     message = `Đã đưa ${yieldCount} khẩu phần vào kho.`;
+  } else if (cmd.type === "cart-control") {
+    near(p, POINTS.depot);
+    requireThat(typeof cmd.paused === "boolean", "Chọn tiếp tục hoặc tạm dừng xe.");
+    requireThat(cmd.target === undefined || ["west", "east"].includes(cmd.target), "Điểm giao hàng không hợp lệ.");
+    const cart = prepareCart(w);
+    if (cmd.target && cmd.target !== cart.target) {
+      requireThat(cart.cargo === 0 && cart.leg === "outbound" && cart.distance === 0, "Chỉ đổi nơi nhận khi xe đã trở về kho và không mang hàng.");
+      cart.target = cmd.target;
+      cart.route = cartRoad(cart.target);
+      cart.routeDistance = roadLength(cart.route);
+    }
+    cart.paused = cmd.paused;
+    cart.status = cart.paused ? "paused" : cart.leg === "return" ? "returning" : cart.cargo ? "transit" : w.depot > 0 ? "ready" : "empty";
+    cart.moving = !cart.paused && ["transit", "returning"].includes(cart.status);
+    message = cart.paused ? "Đã tạm dừng xe. Toàn bộ hàng vẫn được giữ trên xe." : `Xe tiếp tục tuyến ${w.villages.find(v => v.id === cart.target).name}.`;
+  } else if (cmd.type === "stock-food") {
+    near(p, POINTS.depot);
+    requireThat(Number.isInteger(cmd.amount) && cmd.amount > 0 && cmd.amount <= 40, "Số khẩu phần cần từ 1 đến 40.");
+    requireThat(p.bag.food >= cmd.amount, "Túi không đủ khẩu phần để chuyển.");
+    p.bag.food -= cmd.amount;
+    w.depot += cmd.amount;
+    const cause = event(w, "food", `${p.name} đưa ${cmd.amount} khẩu phần vào kho chung để tiếp tế.`, "depot");
+    rememberFood(w, "depotFoodLots", cmd.amount, cause);
+    message = `Đã chuyển ${cmd.amount} khẩu phần vào kho chung.`;
   } else if (cmd.type === "supply") {
     near(p, POINTS.depot);
     requireThat(w.depot > 0, "Kho đã hết lương thực.");
@@ -559,6 +770,7 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       40 - Object.values(p.bag).reduce((a, b) => a + b, 0),
     );
     requireThat(amount > 0, "Túi đã đầy.");
+    takeFoodCauses(w, "depotFoodLots", amount);
     w.depot -= amount;
     p.bag.food += amount;
     message = `Đã lấy ${amount} khẩu phần từ kho.`;
@@ -573,13 +785,14 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     const amount = p.bag.food;
     v.food += amount;
     p.bag.food = 0;
-    event(
+    const cause = event(
       w,
       "food",
       `${p.name} giao ${amount} khẩu phần cho ${v.name}.`,
       cmd.target,
-      w.bridgeCause ? [w.bridgeCause] : [],
+      [],
     );
+    rememberFood(v, "foodLots", amount, cause);
     message = "Đã giao thức ăn.";
   } else if (cmd.type === "explore") {
     near(p, POINTS.ruin);
@@ -623,90 +836,78 @@ export function simulateDay(w, production = true) {
     Math.min(8, w.predators + (w.grazers > 12 ? 0.08 : -0.12)),
   );
   w.crop = Math.min(1, w.crop + w.moisture * 0.4);
-  if (production && w.bridge) {
-    if (w.cart.cargo === 0) {
-      const amount = Math.min(8, w.depot);
-      w.depot -= amount;
-      w.cart.cargo = amount;
-      w.cart.progress = 0;
-    }
-    if (w.cart.cargo > 0) {
-      w.cart.progress++;
-      if (w.cart.progress >= 2) {
-        const amount = w.cart.cargo;
-        w.villages[1].food += amount;
-        w.cart.cargo = 0;
-        w.cart.progress = 0;
-        w.deliveries++;
-        event(
-          w,
-          "logistics",
-          `Xe giao ${amount} khẩu phần từ kho đến Làng Hạ. Không còn hàng trên xe.`,
-          "east",
-          w.bridgeCause ? [w.bridgeCause] : [],
-        );
-      }
-    }
-  }
-  w.cart.status = !w.bridge
-    ? "blocked"
-    : !production
-      ? "resting"
-      : w.cart.cargo
-        ? "transit"
-        : w.depot
-          ? "ready"
-          : "empty";
-  // Snapshot decisions prevent an NPC migrating twice in one day.
-  const decisions = [];
+  // Cart work advances only in advance(), split at work-credit boundaries.
+  // Daily ecology and villagers' own subsistence continue when automation rests.
+  prepareCart(w);
+  if (!production && !w.cart.paused) { w.cart.status = "resting"; w.cart.moving = false; }
+  w.housingBase ??= Object.fromEntries(w.villages.map(v => [v.id, Math.max(12, w.npcs.filter(n => n.village === v.id).length)]));
+  const fishYield = w.fish / 100 * 1.1;
+  let catches = 0;
   for (const v of w.villages) {
-    const people = w.npcs.filter((n) => n.village === v.id);
-    const fishers = people.filter((n) => n.job === "Đánh cá").length;
-    const produced = Math.floor(
-      (fishers * w.fish) / 100 + (people.length - fishers) * w.moisture * 0.7,
-    );
+    const people = w.npcs.filter(n => n.village === v.id).sort((a, b) => a.id.localeCompare(b.id));
+    const fishers = people.filter(n => n.job === "Đánh cá").length;
+    const farmYield = w.moisture * (v.id === "west" ? 1.2 : 0.9);
+    const caught = Math.min(Math.max(0, Math.floor(w.fish - catches)), Math.floor(fishers * fishYield));
+    const planted = (people.length - fishers) * farmYield + (v.harvestCarry || 0);
+    const grown = Math.floor(planted);
+    v.harvestCarry = planted - grown;
+    catches += caught;
+    const produced = caught + grown, before = v.food;
     v.food += produced;
-    const fed = Math.min(people.length, v.food);
-    v.food -= fed;
-    const shortage = fed < people.length;
+    const consumed = Math.min(people.length, Math.floor(v.food));
+    const rotation = people.length ? w.day % people.length : 0;
+    const rank = new Map(people.map((n, i) => [n.id, (i - rotation + people.length) % people.length]));
+    // Feed the longest hungry first. Rotate ties so a scarce final ration does
+    // not always go to the same resident because of array order.
+    const rationOrder = [...people].sort((a, b) => (b.hungryDays || 0) - (a.hungryDays || 0) || rank.get(a.id) - rank.get(b.id));
+    const fed = new Set(rationOrder.slice(0, consumed).map(n => n.id));
+    const mealCauses = takeFoodCauses(v, "foodLots", consumed);
+    v.food -= consumed;
+    v.daily = { day: w.day, produced, consumed, shortage: people.length - consumed, trend: v.food - before };
+    if (mealCauses.length) v.mealCause = event(w, "food", `${v.name} chia ${consumed} khẩu phần cho cư dân, có sử dụng thức ăn vừa được tiếp tế. Còn ${v.food} khẩu phần trong làng.`, v.id, mealCauses);
     for (const n of people) {
-      n.hungryDays = shortage ? n.hungryDays + 1 : 0;
-      if (n.hungryDays >= 3) {
-        const destination = w.villages.find((other) => other.id !== v.id);
-        if (w.bridge && destination.food > 24)
-          decisions.push({ n, destination });
-        else if (n.job === "Đánh cá" && w.moisture > 0.6) {
-          n.job = "Trồng trọt";
-          n.hungryDays = 0;
-          event(
-            w,
-            "npc",
-            `${n.name} chuyển từ đánh cá sang trồng trọt sau ba ngày thiếu ăn, khi ruộng đủ ẩm.`,
-            v.id,
-            w.gateCause ? [w.gateCause] : [],
-          );
-        }
-      }
+      n.fedToday = fed.has(n.id);
+      n.hungryDays = n.fedToday ? 0 : (n.hungryDays || 0) + 1;
+      n.hungerDebt = Math.max(0, (n.hungerDebt || 0) + (n.fedToday ? -0.5 : 1));
+      n.lastDecisionReason ??= n.fedToday ? "Ở lại làng, làm việc và nhận khẩu phần hằng ngày." : "Đang chờ thêm thức ăn tại làng.";
+    }
+    const betterJob = farmYield > fishYield + 0.15 ? "Trồng trọt" : fishYield > farmYield + 0.15 ? "Đánh cá" : null;
+    const candidate = rationOrder.find(n => betterJob && n.job !== betterJob && (n.hungryDays >= 2 || n.hungerDebt >= 2) && w.day - (n.jobChangedDay ?? -5) >= 5);
+    if (candidate) {
+      const from = candidate.job;
+      candidate.job = betterJob;
+      candidate.jobChangedDay = w.day;
+      candidate.lastDecisionReason = betterJob === "Trồng trọt"
+        ? `Chuyển sang trồng trọt vì ruộng ẩm ${Math.round(w.moisture * 100)}% cho sản lượng tốt hơn đánh cá.`
+        : `Chuyển sang đánh cá vì nguồn cá ${Math.round(w.fish)}% cho sản lượng tốt hơn ruộng hiện tại.`;
+      candidate.decisionCause = event(w, "npc", `${candidate.name} đổi nghề từ ${from.toLowerCase()} sang ${betterJob.toLowerCase()} sau những bữa thiếu ăn. ${candidate.lastDecisionReason}`, v.id);
     }
   }
-  for (const { n, destination } of decisions) {
-    const capacity = housingCapacity(w, destination.id);
-    if (
-      capacity !== null &&
-      w.npcs.filter((person) => person.village === destination.id).length >=
-        capacity
-    )
-      continue;
-    const from = n.village;
-    n.village = destination.id;
-    n.hungryDays = 0;
-    event(
-      w,
-      "npc",
-      `${n.name} rời ${from === "east" ? "Làng Hạ" : "Làng Thượng"} đến ${destination.name}: thiếu ăn ba ngày, làng nhận còn dự trữ${w.housingBase ? " và chỗ ở" : ""}, cầu đã thông.`,
-      destination.id,
-      w.bridgeCause ? [w.bridgeCause] : [],
-    );
+  w.fish = Math.max(0, w.fish - catches * 0.6);
+  // Decide from a shared post-meal snapshot; at most one resident leaves each
+  // village per day. Applying decisions never creates or replaces an NPC.
+  const snapshots = w.villages.map(v => ({ v, people: w.npcs.filter(n => n.village === v.id), food: v.food }));
+  const decisions = [];
+  for (const source of snapshots) {
+    if (source.people.length <= 2) continue;
+    const destination = snapshots.find(other => other.v.id !== source.v.id);
+    if (!destination) continue;
+    const sourceCoverage = source.food / source.people.length;
+    const destinationCoverage = destination.food / (destination.people.length + 1);
+    if (destinationCoverage < 1 || destinationCoverage < sourceCoverage + 0.75 || destination.people.length >= housingCapacity(w, destination.v.id)) continue;
+    if (!w.bridge || !findRoute(w, POINTS[source.v.id], POINTS[destination.v.id])) continue;
+    const n = [...source.people].sort((a, b) => (b.hungerDebt || 0) - (a.hungerDebt || 0) || a.id.localeCompare(b.id))
+      .find(person => (person.hungryDays >= 3 || person.hungerDebt >= 3) && w.day - (person.movedDay ?? -7) >= 7);
+    if (n) decisions.push({ n, source, destination });
+  }
+  for (const { n, source, destination } of decisions) {
+    const count = w.npcs.filter(person => person.village === destination.v.id).length;
+    if (count >= housingCapacity(w, destination.v.id)) continue;
+    n.village = destination.v.id;
+    n.movedDay = w.day;
+    n.lastDecisionReason = `Rời ${source.v.name} sau nhiều bữa thiếu ăn: ${destination.v.name} còn giường và dự trữ tốt hơn, đường qua cầu đã thông.`;
+    const houses = (w.buildings || []).filter(b => b.kind === "house" && b.village === destination.v.id && b.cause).map(b => b.cause);
+    n.decisionCause = event(w, "npc", `${n.name} ${n.lastDecisionReason.charAt(0).toLowerCase()}${n.lastDecisionReason.slice(1)}`, destination.v.id, [w.bridgeCause, ...houses].filter(Boolean));
   }
 }
 export function advance(w, now, active, speed = 30) {
@@ -723,10 +924,13 @@ export function advance(w, now, active, speed = 30) {
   }
   const end = active ? now : Math.min(now, w.offlineUntil);
   let elapsed = Math.max(0, end - w.lastWall);
+  prepareCart(w);
   // Max 4320 simulated days per absence at prototype speed 30; no per-frame loop.
   while (elapsed > 0) {
-    const slice = Math.min(elapsed, (DAY_MS - w.dayProgress) / speed);
-    const working = active || w.creditMs >= slice;
+    const credit = Math.max(0, w.creditMs || 0);
+    const working = active || credit > 0;
+    const slice = Math.min(elapsed, (DAY_MS - w.dayProgress) / speed, !active && working ? credit : Infinity);
+    advanceCart(w, slice * speed, working);
     if (!active) w.creditMs = Math.max(0, w.creditMs - slice);
     w.dayProgress += slice * speed;
     elapsed -= slice;

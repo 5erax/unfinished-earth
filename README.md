@@ -16,6 +16,8 @@ Game hướng đến chơi solo và co-op PvE trong các thế giới riêng, v�
 
 Prototype gồm một vùng nhìn từ trên xuống bằng Canvas 2D, với đồ họa pixel, thu thập, sửa cầu, cống tưới, cây trồng, nhà và kho đặt trên bản đồ, xe giao hàng, 24 NPC và Chronicle. Máy chủ Node.js quyết định trạng thái; SQLite lưu world và biên nhận lệnh. Xem [hướng dẫn chạy và giới hạn](docs/06-playable-prototype.md) và [định hướng đồ họa](docs/07-visual-direction.md).
 
+Bản **Thung lũng đang sống** bổ sung xe di chuyển theo tuyến và quay về kho, điều phối hàng đến hai làng, chia khẩu phần theo nhu cầu, quyết định đổi nghề/nơi ở có thời gian chờ, bảng đời sống và nhật ký lần theo nguyên nhân. Xem [nội dung demo](docs/08-living-valley-demo.md).
+
 ### Chạy thử
 
 Cài Node.js 24 trở lên, sau đó:

@@ -18,12 +18,15 @@ const held = new Map();
 import {
   BUILDINGS,
   CLASSES,
+  cartPosition, settlementSummary, DAY_MS,
   freeSegment, findRoute, MOVE_SPEED,
   placementProblem,
   housingCapacity,
   walkable as mapWalkable,
 } from "/world-rules.js";
 import { Map2D } from "/map2d.js";
+import { createValleyUI } from "/valley-ui.js";
+import { createChronicleUI } from "/chronicle-ui.js";
 const $ = (id) => document.getElementById(id);
 const P = {
   home: { x: 7, z: 22 },
@@ -66,7 +69,7 @@ const copy = {
   ],
   depot: [
     "Kho và xe kéo",
-    "Kho chung cấp thức ăn cho xe và người chơi. Xe giao 8 khẩu phần sau hai ngày game nếu cầu thông.",
+    "Xe lấy tối đa 8 khẩu phần từ kho, đi đến làng rồi quay về lấy chuyến tiếp theo. Bạn có thể chọn làng nhận, tạm dừng hoặc bổ sung thức ăn vào kho.",
   ],
 };
 let state = null,
@@ -77,6 +80,15 @@ let state = null,
   toastTimer,
   polling = false,
   online = false;
+let valleyUI, chronicleUI;
+function stopMovement() {
+  held.clear();
+  path = [];
+  queuedAction = null;
+}
+function canAct() {
+  return !!state && online && !busy && !recovering && !motion.pending.length && !hasPending();
+}
 function toast(message) {
   if (!message) return;
   $("toast").textContent = message;
@@ -132,6 +144,8 @@ function renderSync() {
     $("sync-message").textContent =
       "Không đọc được bản ghi đồng bộ trên trình duyệt. Hãy cho phép lưu dữ liệu trang rồi thử lại.";
   }
+  valleyUI?.render(state, selected);
+  if (state) commitActions();
 }
 function hasPending() {
   try {
@@ -225,6 +239,10 @@ async function poll() {
     } else if (r.status === 401) {
       online = false;
       state = null;
+      stopMovement();
+      motion.acknowledge(false);
+      motion.points.clear();
+      valleyUI?.close();
       $("code-label").hidden = !r.data.locked;
       if (!$("welcome").open) $("welcome").showModal();
     } else {
@@ -260,11 +278,12 @@ $("join-form").addEventListener("submit", async (e) => {
   }
 });
 $("welcome").addEventListener("cancel", (e) => e.preventDefault());
-$("help").onclick = () => $("help-dialog").showModal();
+$("help").onclick = () => { stopMovement(); $("help-dialog").showModal(); };
 $("close-help").onclick = () => $("help-dialog").close();
 $("chronicle-toggle").onclick = () => {
   const hidden = ($("events").hidden = !$("events").hidden);
   $("chronicle-toggle").setAttribute("aria-expanded", String(!hidden));
+  document.querySelector(".chronicle-filters").hidden = hidden;
 };
 function select(id) {
   if ($("construction").open) {
@@ -283,11 +302,11 @@ function select(id) {
   if (![...select.options].some((o) => o.value === id)) {
     const o = document.createElement("option");
     o.value = id;
-    o.textContent = state?.buildings?.find((b) => b.id === id)
+    o.textContent = state?.npcs?.find(n => n.id === id)?.name || (state?.buildings?.find((b) => b.id === id)
       ? BUILDINGS[state.buildings.find((b) => b.id === id).kind].name
       : state?.resources.find((r) => r.id === id)?.type === "wood"
         ? "Rừng cây"
-        : "Mỏ đá";
+        : "Mỏ đá");
     select.append(o);
   }
   select.value = id;
@@ -299,7 +318,8 @@ function target() {
   return (
     P[selected] ||
     state?.resources.find((r) => r.id === selected) ||
-    state?.buildings?.find((b) => b.id === selected)
+    state?.buildings?.find((b) => b.id === selected) ||
+    P[state?.npcs?.find(n => n.id === selected)?.village]
   );
 }
 function canWalk(x, z) {
@@ -375,9 +395,7 @@ const directions = {
 function inputBlocked() {
   return (
     ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName) ||
-    $("help-dialog").open ||
-    $("welcome").open ||
-    $("character-dialog").open ||
+    !!document.querySelector("dialog[open]") ||
     document.hidden
   );
 }
@@ -416,6 +434,8 @@ for (const b of document.querySelectorAll("[data-move]")) {
       () => held.delete("pointer");
 }
 pathTimer = setInterval(() => {
+  // Finish sending already-requested steps even when a dialog takes focus.
+  if (state && online && !recovering && motion.pending.length && !hasPending()) sendMoves();
   if (
     !state ||
     !online ||
@@ -532,6 +552,7 @@ for (const [id, direction] of [
 let questTarget = "home-wood";
 function updateQuest() {
   const p = state.players[state.you];
+  const ownBuildings = (state.buildings || []).filter(b => b.owner === state.you);
   let title, hint;
   if (!state.bridge) {
     if (p.bag.wood < 8) {
@@ -578,29 +599,53 @@ function updateQuest() {
     questTarget = "gate";
     const needed=p.bag.wood<4?"wood":p.bag.stone<2?"stone":null;
     if(needed){questTarget=state.resources.filter(r=>r.type===needed&&r.remaining>0).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]?.id;hint=`Cần thêm ${needed==="wood"?4-p.bag.wood:2-p.bag.stone} ${needed==="wood"?"gỗ":"đá"} để mở cống. Dẫn đường sẽ đưa bạn tới nguồn còn hàng.`;}
-  } else {
+  } else if (!ownBuildings.some(b => b.kind === "house")) {
     title = "Dựng một nơi để ở lại";
     hint =
-      "Xây nhà gần làng để thêm chỗ ở, hoặc dựng kho để cất vật liệu. Xem lịch sử để hiểu thung lũng đổi thay.";
+      "Một căn nhà cần 6 gỗ và 2 đá, thêm 2 chỗ ở. Xây gần làng có đủ thức ăn để đón người đến.";
     questTarget = null;
+  } else if (!ownBuildings.some(b => b.kind === "storehouse")) {
+    title = "Dành dụm cho ngày mai";
+    hint = "Xây kho với 4 gỗ và 2 đá. Cất bớt vật liệu để túi còn chỗ cho chuyến tiếp tế.";
+    questTarget = null;
+  } else if (!p.discoveries.includes("ruin")) {
+    title = "Đọc dấu tích bên kia sông";
+    hint = "Đến tàn tích để tìm hiểu mực nước cũ. Những quyết định hôm nay sẽ trở thành câu chuyện của thung lũng.";
+    questTarget = "ruin";
+  } else {
+    const village = state.villages.map(v => settlementSummary(state,v.id)).sort((a,b) => a.foodDays-b.foodDays)[0];
+    title = village.foodDays < 2 ? `Tiếp sức ${village.name}` : "Thung lũng trong tay bạn";
+    hint = village.foodDays < 2
+      ? "Mang khẩu phần đến làng, hoặc chọn làng này làm điểm nhận của xe. Mở Thung lũng để xem nhu cầu từng cộng đồng."
+      : "Giữ nguồn nước, lương thực và chỗ ở cân bằng. Mỗi thay đổi của bạn đều để lại dấu vết trong biên niên sử.";
+    questTarget = village.foodDays < 2 ? (p.bag.food ? village.id : "depot") : "overview";
   }
+  $("chapter-label").textContent = state.gateCause ? "CHƯƠNG 02" : "CHƯƠNG 01";
   $("quest-title").textContent = title;
   $("quest-hint").textContent = hint;
-  $("quest-go").textContent = questTarget
+  $("quest-go").textContent = questTarget === "overview" ? "Quan sát thung lũng →" : questTarget
     ? "Dẫn đường đến mục tiêu →"
     : "Mở xây dựng →";
   const done =
     (state.bridge ? 2 : p.bag.wood >= 8 && p.bag.stone >= 4 ? 1 : 0) +
-    (state.deliveries > 0 ? 1 : 0) +
-    (state.gateCause ? 1 : 0);
-  $("quest-progress").textContent = `${done} / 4 cột mốc đã đạt`;
+    (state.deliveries > 0 || state.events.some(e => e.kind === "food" && e.place === "east") ? 1 : 0) +
+    (state.gateCause ? 1 : 0) +
+    (ownBuildings.some(b => b.kind === "house") ? 1 : 0) +
+    (ownBuildings.some(b => b.kind === "storehouse") ? 1 : 0) +
+    (p.discoveries.includes("ruin") ? 1 : 0);
+  $("quest-progress").textContent = `${done} / 7 cột mốc đã đạt`;
 }
 $("quest-go").onclick = () => {
+  if (questTarget === "overview") { valleyUI.open(); return; }
   if (questTarget) {
     select(questTarget);
     const t = target();
     travel(questTarget === "bridge" ? { x: 14, z: 17 } : t);
-  } else $("build-toggle").click();
+  } else {
+    $("build-kind").value = state.buildings?.some(b => b.owner === state.you && b.kind === "house") ? "storehouse" : "house";
+    $("build-toggle").click();
+    renderConstruction();
+  }
 };
 $("close-inspect").onclick = () =>
   document.querySelector(".inspect").classList.remove("open");
@@ -624,14 +669,15 @@ function action(label, cmd, disabled = false) {
   actionSpecs.push({ label, cmd, disabled });
 }
 function commitActions() {
-  const signature = JSON.stringify(actionSpecs);
+  const enabled = canAct();
+  const signature = JSON.stringify([actionSpecs, enabled]);
   if ($("actions").dataset.signature === signature) return;
   $("actions").dataset.signature = signature;
   $("actions").replaceChildren();
   for (const { label, cmd, disabled } of actionSpecs) {
     const b = document.createElement("button");
     b.textContent = label;
-    b.disabled = disabled;
+    b.disabled = disabled || !enabled;
     b.onclick = () => {
       const t = target(),
         p = state.players[state.you];
@@ -656,12 +702,12 @@ function renderUI() {
   const p = state.players[state.you];
   if (!p) return;
   $("clock").textContent =
-    `Ngày ${state.day} · ${state.weather} · ×${state.speed}`;
+    `Ngày ${state.day} · ${String(Math.floor(state.dayProgress / DAY_MS * 24)).padStart(2, "0")}:00 · ${state.weather}`;
   $("connection").textContent = `${state.online} người kết nối`;
   $("coordinates").textContent = `${Math.round(p.x * 16)} / ${Math.round(p.z * 16)} m`;
   for (const kind of ["wood", "stone", "food"])
     $(kind).textContent = p.bag[kind];
-  $("save").textContent = "Tiến độ được lưu tự động";
+  $("save").textContent = !online ? "Đang chờ kết nối" : busy || recovering || hasPending() ? "Đang lưu thay đổi…" : "Tiến độ đã được lưu";
   $("credit").textContent =
     `Tín dụng offline: ${Math.floor(state.creditMs / 60000)} / 480 phút`;
   const complete = [
@@ -676,7 +722,8 @@ function renderUI() {
   updateQuest();
   $("villages").replaceChildren();
   for (const v of state.villages) {
-    const population = state.npcs.filter((n) => n.village === v.id).length;
+    const summary = settlementSummary(state,v.id);
+    const population = summary.population;
     const row = document.createElement("div");
     row.className = "village";
     const title = document.createElement("span");
@@ -684,20 +731,24 @@ function renderUI() {
     title.textContent = `${v.name} · ${population} dân${capacity !== null ? ` / ${capacity} chỗ` : ""}`;
     const food = document.createElement("strong");
     food.className = v.food < population ? "warning" : "";
-    food.textContent = `${v.food} khẩu phần`;
+    food.textContent = `${v.food} · ${summary.foodDays.toFixed(1)} ngày`;
+    row.title = "Lương thực dự trữ chia cho nhu cầu một ngày, chưa tính sản xuất mới.";
     row.append(title, food);
     $("villages").append(row);
   }
   const r = state.resources.find((r) => r.id === selected);
   const building = state.buildings?.find((b) => b.id === selected);
-  const [title, description] = (building
+  const npc = state.npcs.find(n => n.id === selected);
+  const village = npc && state.villages.find(v => v.id === npc.village);
+  const [title, description] = (npc ? [npc.name,
+    `${village.name} · ${npc.job}. ${npc.hungryDays ? `Đã thiếu ăn ${npc.hungryDays} ngày.` : "Đã có khẩu phần trong ngày gần nhất."} ${npc.lastDecisionReason || "Đang cùng dân làng duy trì sinh kế."}`] : building
     ? [
         BUILDINGS[building.kind].name,
         `Ô ${building.x}, ${building.z}. ${building.kind === "house" ? "Thêm 2 chỗ ở cho " + state.villages.find((v) => v.id === building.village).name : building.owner === state.you ? "Kho của bạn · sức chứa 80 đơn vị." : "Kho thuộc người chơi khác."}`,
       ]
     : copy[selected]) || [
     r?.type === "wood" ? "Rừng cây" : "Mỏ đá",
-    `Còn ${r?.remaining ?? 0} đơn vị. Mỗi lần thu thập lấy một đơn vị, túi tối đa 40.`,
+    `Còn ${r?.remaining ?? 0} đơn vị. ${p.classId === "builder" && r?.type === "stone" ? "Thợ dựng lấy tối đa 2 đá mỗi lần." : "Mỗi lần lấy 1 đơn vị."} Túi tối đa 40.`,
   ];
   $("selection-title").textContent = title;
   const focus = selected === "bridge" ? { x: 14, z: 17 } : target();
@@ -705,7 +756,7 @@ function renderUI() {
   $("world-hint").textContent =
     distance > 2.5
       ? `${title} · ${Math.round(distance * 16)} m · Chọn thao tác để đi tới`
-      : `${title} · E để tương tác`;
+      : npc ? `${title} · ${npc.job}` : `${title} · E để tương tác`;
   $("selection-description").textContent = description;
   actionSpecs = [];
   if (r)
@@ -742,8 +793,10 @@ function renderUI() {
       state.depot === 0,
     );
     $("selection-description").textContent +=
-      ` Xe: ${{ blocked: "bị chặn bởi cầu gãy", resting: "hết tín dụng offline", transit: "đang vận chuyển", ready: "sẵn sàng", empty: "chờ bổ sung kho" }[state.cart.status]}; chở ${state.cart.cargo} khẩu phần.`;
+      ` Xe: ${{ blocked: "đường đi bị chặn", resting: "đợi tín dụng làm việc", transit: "đang vận chuyển", returning: "đang quay về kho", paused: "đang tạm dừng", ready: "sẵn sàng", empty: "chờ bổ sung kho" }[state.cart.status] || "đang chuẩn bị"}; chở ${state.cart.cargo} khẩu phần.`;
   }
+  if (npc && p.bag.food)
+    action(`Góp ${p.bag.food} khẩu phần cho ${village.name}`, {type:"donate",target:village.id});
   if (selected === "east" || selected === "west") {
     action(
       `Giao ${p.bag.food} khẩu phần`,
@@ -779,6 +832,7 @@ function renderUI() {
     }
   renderConstruction();
   commitActions();
+  valleyUI?.render(state, selected);
   $("moisture").value = state.moisture;
   $("fish").value = state.fish;
   $("moisture-value").textContent = `${Math.round(state.moisture * 100)}%`;
@@ -787,39 +841,24 @@ function renderUI() {
     ? "Cống đang mở: ruộng nhận nước, đàn cá có thể giảm."
     : "Cống đang đóng: dòng hạ lưu được phục hồi.";
   $("event-count").textContent = `${state.eventSeq} sự kiện`;
-  const ids = state.events.map((e) => e.id).join(",");
-  if ($("events").dataset.ids !== ids) {
-    $("events").dataset.ids = ids;
-    $("events").replaceChildren();
-    for (const e of [...state.events].reverse().slice(0, 15)) {
-      const article = document.createElement("article"),
-        small = document.createElement("small"),
-        text = document.createElement("p");
-      small.textContent = `NGÀY ${e.day} · #${e.id}`;
-      text.textContent = e.text;
-      article.append(small, text);
-      for (const id of e.causes) {
-        const b = document.createElement("button");
-        b.textContent = `Nguyên nhân #${id}`;
-        b.onclick = async () => {
-          try {
-            const r = await api(`/api/event?id=${id}`);
-            toast(r.ok ? r.data.text : r.data.error);
-          } catch {
-            toast("Chưa tải được nguyên nhân.");
-          }
-        };
-        article.append(b);
-      }
-      $("events").append(article);
-    }
-  }
+  chronicleUI?.render(state.events);
 }
 // The renderer reads snapshots; camera and animation never mutate saved gameplay.
 const container = $("world");
 const worldMap = new Map2D(container, select, mapTravel);
+let cartVisual = null;
+function visibleCart(dt) {
+  const cart = state.cart;
+  const routeKey = `${state.you}:${cart.target}:${cart.leg}:${JSON.stringify(cart.route)}`;
+  const distance = Number.isFinite(cart.distance) ? cart.distance : 0;
+  if (!cartVisual || cartVisual.key !== routeKey || distance < cartVisual.distance)
+    cartVisual = {key:routeKey,distance};
+  if (dt > 0) cartVisual.distance += (distance-cartVisual.distance) * (1-Math.exp(-dt*6));
+  const shown = { ...cart, distance:cartVisual.distance };
+  return { ...shown, ...cartPosition({ ...state, cart:shown }) };
+}
 function renderWorld(dt = 0) {
-  const visual = state ? { ...state, players: motion.frame(state, dt).players } : null;
+  const visual = state ? { ...state, cart:visibleCart(dt), players: motion.frame(state, dt).players } : null;
   worldMap.route = [...motion.pending, ...path.map(([x, z]) => ({ x, z }))];
   worldMap.draw(visual, selected, 0, plotPreview());
   const level = $("zoom-level");
@@ -917,6 +956,46 @@ setInterval(() => {
   }
 }, 250);
 
+valleyUI = createValleyUI({
+  select(id) {
+    $("construction").open = false;
+    select(id);
+    const t = target();
+    if (t) worldMap.focus(t.x,t.z);
+  },
+  canAct,
+  onOpen: stopMovement,
+  async command(cmd) {
+    if (!canAct()) return false;
+    const p = state.players[state.you];
+    if (Math.hypot(p.x-P.depot.x,p.z-P.depot.z)>2.5) {
+      valleyUI.close();
+      $("construction").open = false;
+      select("depot");
+      if (!travel(P.depot)) return false;
+      queuedAction = {cmd,destination:P.depot};
+      toast("Đang đến kho để thực hiện yêu cầu. Di chuyển bằng tay sẽ hủy yêu cầu này.");
+      return { queued: true };
+    }
+    return command(cmd);
+  },
+});
+chronicleUI = createChronicleUI({
+  async loadEvent(id) {
+    const response = await api(`/api/event?id=${encodeURIComponent(id)}`);
+    if (!response.ok) throw new Error(response.data.error);
+    return response.data;
+  },
+  select(id) {
+    const known = P[id] || state?.resources.some(r => r.id === id) || state?.buildings?.some(b => b.id === id) || state?.npcs.some(n => n.id === id);
+    if (!known) { toast("Địa điểm này không còn trên bản đồ hiện tại."); return; }
+    $("construction").open = false;
+    select(id);
+    const t = target();
+    if (t) worldMap.focus(t.x,t.z);
+  },
+  onOpen: stopMovement,
+});
 await poll();
 setInterval(() => {
   if (!document.hidden) poll();

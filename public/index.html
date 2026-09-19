@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#111d2a" />
     <title>The Unfinished Earth — Dựng lại một thế giới</title>
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/story.css" />
   </head>
   <body>
     <main id="game">
@@ -66,6 +67,10 @@
           <button id="sync-retry">Kết nối lại</button>
         </div>
       </section>
+      <section class="valley-pulse panel" aria-labelledby="pulse-title">
+        <div class="pulse-heading"><h2 id="pulse-title">Nhịp sống hôm nay</h2><button id="valley-report-open" aria-label="Xem toàn cảnh đời sống thung lũng">↗</button></div>
+        <div id="valley-report"><p class="valley-empty">Đang lắng nghe thung lũng…</p></div>
+      </section>
       <section class="chronicle panel">
         <button id="chronicle-toggle" aria-expanded="true"><span class="eyebrow">BIÊN NIÊN SỬ</span><span id="event-count">0 sự kiện</span></button>
         <div id="events" aria-label="Lịch sử thế giới"></div>
@@ -95,6 +100,7 @@
         </p>
         <button class="secondary" id="travel">Đi đến địa điểm</button>
         <div id="actions"></div>
+        <section id="valley-details" hidden aria-label="Tình hình địa điểm"></section>
         <div id="storage-panel" hidden>
           <p id="storage-stock"></p>
           <label for="storage-resource">Vật liệu</label>
@@ -170,6 +176,7 @@
           </div>
         </div>
         <div class="controls">
+          <button id="valley-open" aria-haspopup="dialog" aria-controls="valley-dialog">Thung lũng</button>
           <button id="character-open">Nhân vật</button>
           <button id="build-toggle">Xây dựng</button>
           <button id="map-overview">Toàn cảnh</button>
@@ -182,6 +189,38 @@
         </div>
       </footer>
     </main>
+    <dialog id="valley-dialog" aria-labelledby="valley-title">
+      <header class="valley-heading">
+        <div><span class="eyebrow">MỖI KHẨU PHẦN, MỘT CUỘC ĐỜI</span><h2 id="valley-title">Thung lũng đang sống</h2><p id="valley-day">Đang kết nối với thế giới…</p></div>
+        <button id="valley-close" class="valley-close" aria-label="Đóng bảng thung lũng">×</button>
+      </header>
+      <div id="valley-settlements" class="valley-settlements"></div>
+      <section class="valley-logistics" aria-labelledby="logistics-title">
+        <div class="valley-section-heading"><div><span class="eyebrow">ĐƯỜNG ĐI CỦA LƯƠNG THỰC</span><h3 id="logistics-title">Kho chung &amp; xe kéo</h3></div><button id="valley-depot-locate">Xem kho trên bản đồ ↗</button></div>
+        <div class="valley-logistics-grid">
+          <div>
+            <div class="valley-route"><span id="valley-route-from">Kho chung</span><span aria-hidden="true">→</span><span id="valley-route-to">Làng Hạ</span></div>
+            <div class="valley-cart-summary"><strong id="valley-cart-status">Đang chờ</strong><span id="valley-cart-cargo">0 khẩu phần trên xe</span></div>
+            <progress id="valley-cart-progress" max="1" value="0" aria-label="Tiến độ chặng đường của xe"></progress>
+            <p id="valley-cart-eta" class="valley-muted"></p>
+            <div class="valley-depot-stock"><span>Trong kho chung</span><strong id="valley-depot-stock">—</strong></div>
+            <p id="valley-route-reason" class="valley-muted"></p>
+          </div>
+          <div class="valley-dispatch">
+            <div class="valley-dispatch-heading"><strong>Điều phối tại kho</strong><button id="valley-cart-toggle">Tạm dừng xe</button></div>
+            <p class="valley-muted">Tạm dừng giữ nguyên hàng trên xe. Chọn thao tác để nhân vật đi đến kho thực hiện.</p>
+            <label for="valley-cart-target">Làng nhận chuyến tiếp theo</label>
+            <div class="valley-input-row"><select id="valley-cart-target"><option value="east">Làng Hạ</option><option value="west">Làng Thượng</option></select><button id="valley-cart-apply">Đổi tuyến</button></div>
+            <p id="valley-target-note" class="valley-muted">Chỉ đổi nơi nhận khi xe ở kho và không chở hàng.</p>
+            <label for="valley-stock-amount">Đóng góp thức ăn từ túi</label>
+            <div class="valley-input-row"><input id="valley-stock-amount" type="number" min="1" step="1" value="1" inputmode="numeric" /><button id="valley-stock-submit">Góp vào kho</button></div>
+            <p id="valley-bag-food" class="valley-muted">Trong túi: 0 khẩu phần</p>
+            <p id="valley-command-note" role="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
+      <footer class="valley-footer">Thời gian và dự trữ là số liệu trong game. Người dân ăn, làm việc và cân nhắc nơi ở theo điều kiện của làng.</footer>
+    </dialog>
     <dialog id="character-dialog">
       <form id="character-form">
         <span class="eyebrow">NHỮNG NGƯỜI DỰNG LẠI THẾ GIỚI</span>
@@ -252,7 +291,7 @@
       </p>
       <p>
         Thu thập 8 gỗ + 4 đá, đến bờ tây cầu để sửa. Sau đó lấy thức ăn ở kho và
-        giao Làng Hạ, hoặc để xe giao tự động mỗi hai ngày game khi đang online.
+        giao Làng Hạ, hoặc để xe tự chở hàng. Mỗi chặng đi hoặc về mất hai ngày game; xe chờ tại kho trước chuyến mới.
       </p>
       <p>
         Cống tưới cần 4 gỗ + 2 đá khi mở lần đầu. Nước giúp cây lớn nhưng giảm

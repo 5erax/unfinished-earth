@@ -1202,3 +1202,127 @@ dialog .class-card small { font-size: 11px; line-height: 1.6; color: #c2c9b7; ma
   #world-hint { bottom: 135px; }
   #toast { bottom: 181px; }
 }
+
+/* Living valley: readable ledgers and persistent controls in the game's palette. */
+.valley-pulse { padding: 14px 12px; }
+.pulse-heading { display: flex; gap: 8px; justify-content: space-between; align-items: center; }
+.pulse-heading h2 { margin: 0; font-size: 14px; font-weight: 650; color: #e6d8b3; }
+.pulse-heading button { padding: 4px 8px; min-width: 32px; min-height: 32px; font-size: 16px; }
+#valley-report { display: grid; gap: 9px; margin-top: 12px; }
+.valley-report-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0 0 0 9px;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid #ba925a;
+  box-shadow: none;
+  border-radius: 0;
+}
+.valley-report-item:hover { background: #ffffff06; border-color: #f0d39a; }
+.valley-report-item strong, .valley-report-item span { display: block; font-size: 14px; line-height: 1.5; }
+.valley-report-item strong { color: #e8d6ad; font-weight: 600; }
+.valley-report-item span { color: #b1c2bc; font-weight: 400; margin-top: 3px; }
+.valley-report-positive { border-color: #91b38a; }
+.valley-report-positive strong { color: #bbd9a7; }
+.valley-empty { font-size: 14px; line-height: 1.5; color: var(--muted); margin: 0; }
+#valley-open { color: #efdcaa; border-color: #857b58; }
+#valley-details { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 16px; }
+.valley-detail-title { color: #dac591; font-size: 14px; line-height: 1.5; }
+#valley-details p { font-size: 14px; line-height: 1.6; }
+#valley-details button { width: 100%; font-size: 14px; min-height: 40px; text-align: left; }
+#valley-dialog {
+  width: min(960px, calc(100% - 28px));
+  padding: 26px;
+  border-color: #738375;
+  box-shadow: 0 24px 90px #0009;
+  scrollbar-width: thin;
+  scrollbar-color: #617868 #142530;
+}
+#valley-dialog button, #valley-dialog select, #valley-dialog input { font-size: 14px; min-height: 40px; }
+#valley-dialog p { font-size: 14px; line-height: 1.6; }
+.valley-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px; }
+.valley-heading h2 { margin: 9px 0; font-size: clamp(25px, 3.2vw, 34px); letter-spacing: -.6px; }
+#valley-day { color: #b0c5bc; margin: 0; }
+#valley-dialog .valley-close { flex-shrink: 0; font-size: 25px; width: 42px; padding: 0; color: #c9d2c1; background: transparent; border-color: #45605d; }
+.valley-settlements { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.valley-village { min-width: 0; border-top: 3px solid #83a58e; padding: 18px; background: #1b3039; border-radius: 3px; }
+.valley-village-east { border-top-color: #7ea7bc; }
+.valley-at-risk { border-top-color: #d4a963; }
+.valley-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.valley-section-heading h3 { margin: 0; color: #efe4c6; font-size: 21px; letter-spacing: -.3px; }
+.valley-section-heading button { padding: 8px; background: transparent; box-shadow: none; border-color: #4b645f; flex-shrink: 0; }
+.valley-reserve { margin: 22px 0; display: flex; flex-direction: column; gap: 4px; }
+.valley-reserve span { color: #bdcdc2; font-size: 14px; }
+.valley-reserve strong { font-size: 30px; line-height: 1.25; color: #c9dda9; letter-spacing: -.6px; font-weight: 650; }
+.valley-at-risk .valley-reserve strong { color: #e4be7f; }
+.valley-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid #3a5053; }
+.valley-metric { display: flex; flex-direction: column; min-width: 0; gap: 5px; }
+.valley-metric span { font-size: 14px; line-height: 1.4; color: #b1c5bf; }
+.valley-metric strong { font-size: 20px; color: #f0e4bd; font-variant-numeric: tabular-nums; font-weight: 600; }
+.valley-ledger { padding-top: 16px; }
+.valley-ledger-label { font-size: 10px; letter-spacing: 1.2px; color: #bdc2a7; }
+.valley-ledger-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.valley-good strong { color: #b1d0a1; }
+.valley-warning, .valley-metric strong.valley-warning { color: #f0bd81; }
+#valley-dialog .valley-trend { margin: 14px 0 0; color: #aebfc0; }
+#valley-dialog .valley-village-reason { color: #d0d6bd; margin: 10px 0 16px; }
+.valley-roster { border-top: 1px solid #3a5053; padding-top: 14px; }
+.valley-roster summary { font-size: 14px; color: #dfc893; font-weight: 600; line-height: 1.5; padding: 3px 0; }
+.valley-roster-list { display: grid; margin-top: 14px; gap: 0; }
+.valley-resident { padding: 13px 0; border-top: 1px solid #42555970; }
+.valley-resident:first-child { border-top: 0; padding-top: 0; }
+.valley-resident-heading { display: flex; gap: 8px; justify-content: space-between; align-items: baseline; }
+.valley-resident-heading strong { font-size: 15px; color: #e2e3cb; }
+.valley-appetite { font-size: 14px; color: #a7c6a2; text-align: right; }
+.valley-appetite.valley-warning { color: #f0bd81; }
+.valley-resident-job { display: block; font-size: 14px; margin-top: 3px; color: #a8beb8; }
+#valley-dialog .valley-resident-reason { margin: 6px 0 0; color: #bac8bf; }
+.valley-logistics { border-top: 1px solid #506052; margin-top: 26px; padding-top: 24px; }
+.valley-logistics .valley-section-heading h3 { margin-top: 6px; }
+.valley-logistics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 22px; }
+.valley-route { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px dashed #63725b; padding: 12px 0 16px; font-size: 17px; font-weight: 650; color: #dac99f; }
+.valley-route > span:nth-child(2) { color: #9aaf9b; }
+.valley-cart-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 20px 0 10px; font-size: 14px; }
+.valley-cart-summary strong { color: #dbddbf; }
+.valley-cart-summary span { color: #bdcfc7; text-align: right; }
+#valley-cart-progress { display: block; width: 100%; height: 9px; accent-color: #b8b26e; border: none; background: #0d202b; }
+#valley-cart-progress::-webkit-progress-bar { background: #0d202b; border-radius: 2px; }
+#valley-cart-progress::-webkit-progress-value { background: #b8b26e; border-radius: 2px; }
+#valley-cart-progress::-moz-progress-bar { background: #b8b26e; border-radius: 2px; }
+#valley-dialog .valley-muted { color: #afc2ba; }
+.valley-depot-stock { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 18px 0 10px; border-top: 1px solid #384e50; font-size: 14px; color: #bfcfc4; }
+.valley-depot-stock strong { font-size: 20px; color: #e5d2a1; }
+.valley-dispatch { border-left: 1px solid #384e50; padding-left: 25px; min-width: 0; }
+.valley-dispatch-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.valley-dispatch-heading > strong { font-size: 16px; color: #e2d3ac; }
+.valley-dispatch label { font-size: 14px; color: #d4ddc8; display: block; margin: 18px 0 8px; }
+.valley-input-row { display: flex; align-items: stretch; gap: 8px; }
+.valley-input-row select, .valley-input-row input { flex: 1; width: 0; min-width: 0; margin: 0; }
+.valley-input-row button { flex-shrink: 0; min-width: 98px; }
+#valley-stock-submit { background: #ceb372; color: #1b2c28; border-color: #dfc788; }
+#valley-command-note { margin-bottom: 0; color: #e8cda0; min-height: 22px; }
+.valley-footer { color: #92ada7; font-size: 14px; line-height: 1.6; border-top: 1px solid #384e50; margin-top: 22px; padding-top: 16px; }
+@media (max-width: 720px) {
+  #valley-dialog { padding: 20px; }
+  .valley-settlements, .valley-logistics-grid { grid-template-columns: minmax(0, 1fr); }
+  .valley-logistics-grid { gap: 20px; }
+  .valley-dispatch { border-left: 0; border-top: 1px solid #384e50; padding: 20px 0 0; }
+  .valley-logistics > .valley-section-heading { align-items: flex-start; flex-direction: column; }
+  .valley-reserve { margin: 18px 0; }
+  .valley-pulse { padding: 20px; }
+}
+@media (max-width: 440px) {
+  #valley-dialog { width: calc(100% - 16px); padding: 16px; max-height: calc(100dvh - 16px); }
+  .valley-heading { gap: 8px; margin-bottom: 20px; }
+  .valley-heading .eyebrow { letter-spacing: .7px; font-size: 9px; }
+  .valley-village { padding: 15px; }
+  .valley-section-heading h3 { font-size: 20px; }
+  .valley-reserve strong { font-size: 28px; }
+  .valley-dispatch-heading { gap: 8px; }
+  .valley-dispatch-heading > strong { font-size: 15px; }
+  .valley-cart-summary { flex-wrap: wrap; gap: 6px; }
+  .valley-cart-summary span { text-align: left; }
+  .valley-input-row button { min-width: 92px; padding: 8px; }
+}

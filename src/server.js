@@ -90,6 +90,9 @@ export function createGameServer({
   const files = new Map([
     ["/world-rules.js", ["src/world.js", "text/javascript"]],
     ["/map2d.js", ["public/map2d.js", "text/javascript"]],
+    ["/valley-ui.js", ["public/valley-ui.js", "text/javascript"]],
+    ["/chronicle-ui.js", ["public/chronicle-ui.js", "text/javascript"]],
+    ["/story.css", ["public/story.css", "text/css"]],
     ["/motion.js", ["public/motion.js", "text/javascript"]],
     ["/characters-v1.png", ["public/characters-v1.png", "image/png"]],
     ["/world-sprites.png", ["public/world-sprites.png", "image/png"]],
