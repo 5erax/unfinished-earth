@@ -1,6 +1,8 @@
 // Original code-drawn pixel art; the camera never mutates authoritative world state.
 const TILE = 24;
 const PAD = 72;
+const WORLD_SIZE = 48;
+const LAND_MAX = WORLD_SIZE - 2;
 const DAY_MS = 1_800_000;
 const CLASS_COLORS = {builder:'#c78a4c',keeper:'#78a868',pathfinder:'#e0b65b',connector:'#819fce'};
 const LANDMARKS = [
@@ -8,6 +10,8 @@ const LANDMARKS = [
   ['gate',14,10,'Cống tưới'], ['farm',10,12,'Ruộng chung'],
   ['depot',11,19,'Kho chung'], ['west',6,8,'Làng Thượng'],
   ['east',24,12,'Làng Hạ'], ['ruin',25,25,'Tàn tích'],
+  ['market',36,10,'Chợ Phiên'], ['mistwood',8,40,'Rừng Sương'],
+  ['highland',40,32,'Cao nguyên Đỏ'],
 ];
 const clamp = (n,a,b) => Math.max(a,Math.min(b,n));
 const noise = (x,y,s=0) => {
@@ -22,16 +26,17 @@ export function unprojectPoint(px,py,v) {
   return {x:(px-v.width/2)/v.tile+v.x,z:(py-v.height/2)/v.tile+v.z};
 }
 export function isMapTile(x,z) {
-  return Number.isInteger(x)&&Number.isInteger(z)&&x>=1&&x<=30&&z>=1&&z<=30;
+  return Number.isInteger(x)&&Number.isInteger(z)&&x>=1&&x<=LAND_MAX&&z>=1&&z<=LAND_MAX;
 }
 function rect(c,x,y,w,h,color) {
   c.fillStyle=color; c.fillRect(Math.round(x),Math.round(y),w,h);
 }
 function road(x,z) {
-  return (x===7&&z>=8&&z<=22)||(z===17&&x>=7&&x<=25)||(x===24&&z>=12&&z<=17);
+  return (x===7&&z>=8&&z<=22)||(z===17&&x>=7&&x<=25)||(x===24&&z>=12&&z<=17)||
+    (z===10&&x>=24&&x<=36)||(x===8&&z>=22&&z<=40)||(z===32&&x>=18&&x<=40);
 }
 function freeDecoration(x,z) {
-  return x>1&&x<30&&z>1&&z<30&&(x<14||x>18)&&!road(Math.round(x),Math.round(z))&&!LANDMARKS.some(p=>Math.hypot(x-p[1],z-p[2])<1.7);
+  return x>1&&x<LAND_MAX&&z>1&&z<LAND_MAX&&(x<14||x>18)&&!road(Math.round(x),Math.round(z))&&!LANDMARKS.some(p=>Math.hypot(x-p[1],z-p[2])<1.7);
 }
 export class Map2D {
   constructor(container,choose,travel) {
@@ -42,7 +47,7 @@ export class Map2D {
     container.replaceChildren(this.canvas);
     this.ctx=this.canvas.getContext('2d',{alpha:false});
     this.choose=choose; this.travel=travel;
-    this.zoom=1; this.center={x:15.5,z:15.5}; this.showLabels=true; this.targets=[];
+    this.zoom=1; this.center={x:23.5,z:23.5}; this.showLabels=true; this.targets=[];
     this.animationTime=0;this.lastAnimationAt=null;this.actorPositions=new Map();
     this.reducedMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)');
     this.terrain=this.makeTerrain();
@@ -83,15 +88,15 @@ export class Map2D {
     this.tile=(this.baseTile||1)*this.zoom;const after=this.unproject(px,py);
     this.center.x+=before.x-after.x;this.center.z+=before.z-after.z;this.clampView();
   }
-  resetView(){this.zoom=1;this.center={x:15.5,z:15.5};this.tile=this.baseTile||1;}
+  resetView(){this.zoom=1;this.center={x:23.5,z:23.5};this.tile=this.baseTile||1;}
   focus(x,z){
     if(!Number.isFinite(x)||!Number.isFinite(z))return;
     this.zoom=Math.max(this.zoom,1.8);this.tile=(this.baseTile||1)*this.zoom;this.center={x,z};this.clampView();
   }
   toggleLabels(){this.showLabels=!this.showLabels;return this.showLabels;}
   clampView(){
-    const hx=Math.min(16.5,(this.w||1)/(2*(this.tile||1))),hz=Math.min(16.5,(this.h||1)/(2*(this.tile||1)));
-    this.center.x=clamp(this.center.x,-1+hx,32-hx);this.center.z=clamp(this.center.z,-1+hz,32-hz);
+    const hx=Math.min(24.5,(this.w||1)/(2*(this.tile||1))),hz=Math.min(24.5,(this.h||1)/(2*(this.tile||1)));
+    this.center.x=clamp(this.center.x,-1+hx,WORLD_SIZE-hx);this.center.z=clamp(this.center.z,-1+hz,WORLD_SIZE-hz);
   }
   pick(px,py){
     if(!this.state)return;const p=this.unproject(px,py);
@@ -103,12 +108,12 @@ export class Map2D {
     if(!this.preview&&nearest&&nearest.d<=.85){this.choose(nearest.t.id);return;}
     if(this.preview){
       const x=Math.round(p.x),z=Math.round(p.z);if(isMapTile(x,z))this.travel({x,z});
-    }else if(Number.isFinite(p.x)&&Number.isFinite(p.z)&&p.x>=1&&p.x<=30&&p.z>=1&&p.z<=30){
+    }else if(Number.isFinite(p.x)&&Number.isFinite(p.z)&&p.x>=1&&p.x<=LAND_MAX&&p.z>=1&&p.z<=LAND_MAX){
       this.travel(p);
     }
   }
   makeTerrain(){
-    const canvas=document.createElement('canvas');canvas.width=canvas.height=32*TILE+PAD*2;
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=WORLD_SIZE*TILE+PAD*2;
     const c=canvas.getContext('2d');c.imageSmoothingEnabled=false;
     rect(c,0,0,canvas.width,canvas.height,'#245a78');
     for(let y=0;y<canvas.height;y+=6)for(let x=0;x<canvas.width;x+=6){
@@ -116,8 +121,8 @@ export class Map2D {
     }
     c.save();c.translate(PAD,PAD);
     // Shores occupy the outside ring; every land tile 1–30 remains land.
-    for(let z=0;z<32;z++)for(let x=0;x<32;x++){
-      const px=x*TILE,py=z*TILE,river=x>=15&&x<=17,border=x===0||x===31||z===0||z===31;
+    for(let z=0;z<WORLD_SIZE;z++)for(let x=0;x<WORLD_SIZE;x++){
+      const px=x*TILE,py=z*TILE,river=x>=15&&x<=17,border=x===0||x===WORLD_SIZE-1||z===0||z===WORLD_SIZE-1;
       if(river){
         rect(c,px,py,TILE,TILE,x===16?'#277b9b':'#3196aa');
         for(let j=0;j<9;j++)rect(c,px+Math.floor(noise(x,z,j+6)*11)*2,py+Math.floor(noise(z,x,j+31)*11)*2,4,2,j%2?'#358fa5':'#3c9fb0');
@@ -128,19 +133,20 @@ export class Map2D {
       if(border){
         const inset=4+Math.floor(noise(x,z)*3)*2;rect(c,px,py,TILE,TILE,'#338da0');
         let sx=px,sy=py,sw=TILE,sh=TILE;
-        if(x===0){sx+=inset;sw-=inset;}if(x===31)sw-=inset;
-        if(z===0){sy+=inset;sh-=inset;}if(z===31)sh-=inset;
+        if(x===0){sx+=inset;sw-=inset;}if(x===WORLD_SIZE-1)sw-=inset;
+        if(z===0){sy+=inset;sh-=inset;}if(z===WORLD_SIZE-1)sh-=inset;
         rect(c,sx,sy,sw,sh,'#79c1b5');rect(c,sx+(x===0?3:0),sy+(z===0?3:0),Math.max(0,sw-3),Math.max(0,sh-3),'#d4c98d');continue;
       }
-      const grass=['#6f9c50','#78a655','#80ad5d','#86b25f','#729e52'][Math.floor(noise(Math.floor(x/2),Math.floor(z/2),13)*5)];
+      const palette=z>31&&x<15?['#477a4c','#568b51','#639753','#729f58','#416f49']:x>31?['#9a874f','#a69355','#b29b5b','#8e7a48','#aa9050']:['#6f9c50','#78a655','#80ad5d','#86b25f','#729e52'];
+      const grass=palette[Math.floor(noise(Math.floor(x/2),Math.floor(z/2),13)*5)];
       rect(c,px,py,TILE,TILE,grass);
       for(let j=0;j<13;j++)rect(c,px+Math.floor(noise(x,z,j+5)*11)*2,py+Math.floor(noise(z,x,j+27)*11)*2,j%3?2:4,2,j%2?'#8bb761':'#69964c');
       if(x===1||x===18){rect(c,px,py,4,TILE,'#c7c283');rect(c,px+4,py+(z%3)*4,2,8,'#a9b574');}
-      if(x===30||x===14){rect(c,px+20,py,4,TILE,'#c7c283');rect(c,px+18,py+(z%3)*4,2,8,'#a9b574');}
-      if(z===1)rect(c,px,py,TILE,4,'#c7c283');if(z===30)rect(c,px,py+20,TILE,4,'#c7c283');
+      if(x===LAND_MAX||x===14){rect(c,px+20,py,4,TILE,'#c7c283');rect(c,px+18,py+(z%3)*4,2,8,'#a9b574');}
+      if(z===1)rect(c,px,py,TILE,4,'#c7c283');if(z===LAND_MAX)rect(c,px,py+20,TILE,4,'#c7c283');
       if(road(x,z)){
-        if((x===7&&z>=8&&z<=22)||(x===24&&z>=12&&z<=17)){rect(c,px+7,py,10,TILE,'#9d9c64');rect(c,px+8,py,8,TILE,'#c4b47a');}
-        if(z===17){rect(c,px,py+7,TILE,10,'#9d9c64');rect(c,px,py+8,TILE,8,'#c4b47a');}
+        if((x===7&&z>=8&&z<=22)||(x===24&&z>=12&&z<=17)||(x===8&&z>=22&&z<=40)){rect(c,px+7,py,10,TILE,'#9d9c64');rect(c,px+8,py,8,TILE,'#c4b47a');}
+        if(z===17||(z===10&&x>=24)||(z===32&&x>=18)){rect(c,px,py+7,TILE,10,'#9d9c64');rect(c,px,py+8,TILE,8,'#c4b47a');}
         rect(c,px+10,py+10,2,1,'#d9c991');
       }else if(noise(x,z,72)>.91&&freeDecoration(x,z)){
         rect(c,px+8,py+12,1,3,'#4f8244');rect(c,px+7,py+11,3,2,'#e6d997');rect(c,px+17,py+6,2,2,'#f0e0af');
@@ -240,7 +246,7 @@ export class Map2D {
   draw(state,selected,_angle=0,preview=null){
     this.preview=preview;this.spriteTargets=[];
     this.state=state;this.w=Math.max(1,this.container.clientWidth);this.h=Math.max(1,this.container.clientHeight);
-    this.baseTile=Math.min(this.w/37,this.h/36);this.tile=this.baseTile*this.zoom;this.clampView();
+    this.baseTile=Math.min(this.w/53,this.h/52);this.tile=this.baseTile*this.zoom;this.clampView();
     const dpr=Math.min(window.devicePixelRatio||1,2),width=Math.round(this.w*dpr),height=Math.round(this.h*dpr);
     if(this.canvas.width!==width||this.canvas.height!==height){this.canvas.width=width;this.canvas.height=height;this.canvas.style.width=`${this.w}px`;this.canvas.style.height=`${this.h}px`;}
     const display=this.ctx;display.setTransform(dpr,0,0,dpr,0,0);display.imageSmoothingEnabled=false;rect(display,0,0,this.w,this.h,'#245a78');
@@ -251,7 +257,7 @@ export class Map2D {
     const now=performance.now(),elapsed=this.lastAnimationAt===null?0:Math.min(.05,Math.max(0,(now-this.lastAnimationAt)/1000));
     this.lastAnimationAt=now;if(!this.reducedMotion?.matches)this.animationTime+=elapsed;
     const time=this.reducedMotion?.matches?0:this.animationTime;
-    for(let i=0;i<27;i++)rect(c,15*TILE+5+Math.floor(noise(i,1)*59),(i*31+Math.floor(time*3))%(32*TILE),5+i%4,1,i%3?'#71b9bd70':'#b1d7c680');
+    for(let i=0;i<42;i++)rect(c,15*TILE+5+Math.floor(noise(i,1)*59),(i*31+Math.floor(time*3))%(WORLD_SIZE*TILE),5+i%4,1,i%3?'#71b9bd70':'#b1d7c680');
     const crop=clamp(state?.crop||0,0,1),fx=9*TILE,fy=11*TILE;
     rect(c,fx-2,fy-2,TILE*3+4,TILE*3+4,'#b4ae71');rect(c,fx,fy,TILE*3,TILE*3,state?.gate?'#685d3c':'#817044');
     for(let row=0;row<9;row++){
@@ -299,21 +305,30 @@ export class Map2D {
         objects.push({id,kind:'house',x:x-.8,z:z-.55,variant:id==='east'?1:0});
         objects.push({id,kind:'house',x:x+.85,z:z+.3,variant:id==='east'?1:0,tiny:true});
         objects.push({id,kind:'house',x:x-.45,z:z+1.15,variant:id==='east'?1:0,tiny:true});
-      }else if(id==='home'||id==='depot')objects.push({id,kind:'house',x,z,variant:id==='depot'?1:0});
+      }else if(id==='home'||id==='depot'||id==='market')objects.push({id,kind:'house',x,z,variant:id==='depot'||id==='market'?1:0});
       else if(id==='ruin')objects.push({id,kind:'ruin',x,z});
+      else if(id==='mistwood')objects.push({id,kind:'wood',x,z,seed:91});
+      else if(id==='highland')objects.push({id,kind:'stone',x,z,seed:92});
     }
     // Preview vegetation has no interactions. Live forests follow actual resources.
-    const resources=state?.resources||Array.from({length:34},(_,i)=>({id:`preview-${i}`,type:i%3?'wood':'stone',x:2+(i*7)%27,z:2+(i*11)%27,remaining:8})).filter(r=>freeDecoration(r.x,r.z));
+    const resourceNames={wood:'Gỗ',stone:'Đá',fiber:'Sợi cỏ',clay:'Đất sét'};
+    const resources=state?.resources||Array.from({length:48},(_,i)=>({id:`preview-${i}`,type:i%4===0?'stone':i%4===1?'fiber':'wood',x:2+(i*7)%43,z:2+(i*11)%43,remaining:8})).filter(r=>freeDecoration(r.x,r.z));
     for(const [i,r] of resources.entries()){
-      if(r.remaining<=0){if(r.type==='wood'){rect(c,r.x*TILE+9,r.z*TILE+10,6,5,'#775637');rect(c,r.x*TILE+9,r.z*TILE+10,6,2,'#c49b62');}continue;}
-      if(state)this.targets.push({id:r.id,x:r.x,z:r.z,label:r.type==='wood'?`Gỗ · ${r.remaining}`:`Đá · ${r.remaining}`});
+      if(state)this.targets.push({id:r.id,x:r.x,z:r.z,label:`${resourceNames[r.type]||r.type} · ${r.remaining}${r.remaining<=0?` · hồi phục ${Math.round((r.regrowth||0)*100)}%`:''}`});
+      if(r.remaining<=0){
+        if(r.type==='wood'){rect(c,r.x*TILE+9,r.z*TILE+10,6,5,'#775637');rect(c,r.x*TILE+9,r.z*TILE+10,6,2,'#c49b62');if((r.regrowth||0)>.45){rect(c,r.x*TILE+11,r.z*TILE+4,2,8,'#547c40');rect(c,r.x*TILE+8,r.z*TILE+3,5,3,'#72a454');}}
+        else if(r.type==='fiber')rect(c,r.x*TILE+7,r.z*TILE+15,10,2,'#657b45');
+        else {rect(c,r.x*TILE+6,r.z*TILE+14,13,3,r.type==='clay'?'#8b644b':'#68736d');}
+        continue;
+      }
       objects.push({id:r.id,kind:r.type,x:r.x,z:r.z,seed:i});
       if(r.type==='wood')for(let j=0;j<4;j++){
         const x=r.x+[-.65,.65,-.4,.5][j],z=r.z+[-.6,-.5,.5,.65][j];
         if(freeDecoration(x,z)&&!(state?.buildings||[]).some(b=>Math.hypot(b.x-x,b.z-z)<1))objects.push({id:r.id,kind:'wood',x,z,seed:i+j,small:true});
       }
     }
-    for(const b of state?.buildings||[]){this.targets.push({id:b.id,x:b.x,z:b.z,label:b.kind==='house'?'Nhà nhỏ':'Kho cá nhân'});objects.push({id:b.id,kind:'house',x:b.x,z:b.z,variant:b.kind==='storehouse'?1:0});}
+    const buildingNames={house:'Nhà nhỏ',storehouse:'Kho cá nhân',field:'Ruộng canh tác',pasture:'Chuồng chăn nuôi'};
+    for(const b of state?.buildings||[]){this.targets.push({id:b.id,x:b.x,z:b.z,label:buildingNames[b.kind]||b.kind});objects.push({id:b.id,kind:b.kind==='field'?'field':b.kind==='pasture'?'pasture':'house',x:b.x,z:b.z,variant:b.kind==='storehouse'?1:0,progress:b.progress||0,animals:b.animals||0});}
     if(cart){
       const x=Number.isFinite(cart.x)?cart.x:11,z=Number.isFinite(cart.z)?cart.z:19;
       objects.push({...cart,id:'depot',kind:'cart',x,z});
@@ -321,10 +336,14 @@ export class Map2D {
     for(const n of state?.npcs||[]){
       const v=LANDMARKS.find(p=>p[0]===n.village);if(!v)continue;
       const i=Number(n.id?.split('-').at(-1))||1,a=i*2.4,d=1.5+(i%3)*.34;
-      // A tiny idle shift is decorative only; village membership comes from the server.
-      const idle=time?Math.sin(time*.55+i)*.035:0,x=v[1]+Math.cos(a)*d+idle,z=v[2]+Math.sin(a)*d;
+      const home={x:v[1]+Math.cos(a)*d,z:v[2]+Math.sin(a)*d};
+      const work={x:Number.isFinite(n.workX)?n.workX+(i%3-1)*.22:home.x,z:Number.isFinite(n.workZ)?n.workZ+((i+1)%3-1)*.22:home.z};
+      const day=((state.dayProgress/DAY_MS)%1+1)%1;
+      const commute=day<.18?0:day<.28?(day-.18)/.1:day<.7?1:day<.82?1-(day-.7)/.12:0;
+      const eased=commute*commute*(3-2*commute),idle=time?Math.sin(time*.8+i)*.04:0;
+      const x=home.x+(work.x-home.x)*eased+idle,z=home.z+(work.z-home.z)*eased;
       const role=n.job==='Đánh cá'?'fisher':'farmer';
-      this.targets.push({id:n.id,x,z,label:`${n.name} · ${n.job}${n.hungryDays>0?' · Thiếu ăn':''}`});
+      this.targets.push({id:n.id,x,z,label:`${n.name} · ${eased>.75?(n.activity||n.job):n.job}${n.hungryDays>0?' · Thiếu ăn':''}`});
       objects.push({id:n.id,kind:'person',x,z,color:n.hungryDays>2?'#a58468':role==='fisher'?'#79a1a0':'#b58b54',seed:i,role,hungry:n.hungryDays>0});
     }
     for(let i=0;i<Math.min(22,Math.max(0,Math.round(state?.grazers??18)));i++){
@@ -343,12 +362,16 @@ export class Map2D {
       const x=(o.x+.5)*TILE,y=(o.z+.5)*TILE;
       if(state&&o.id){
         const size=o.tiny?.8:o.small?.72:1;
-        const box=o.kind==='house'?[-15,-32,18,6]:o.kind==='wood'?[-11,-24,11,3]:o.kind==='ruin'?[-26,-35,31,20]:o.kind==='person'?[-7,o.hungry?-25:-19,12,5]:o.kind==='cart'?[-19,-21,19,17]:[-12,-15,18,6];
+        const box=o.kind==='house'?[-15,-32,18,6]:o.kind==='wood'?[-11,-24,11,3]:o.kind==='ruin'?[-26,-35,31,20]:o.kind==='person'?[-7,o.hungry?-25:-19,12,5]:o.kind==='cart'?[-19,-21,19,17]:[-12,-18,18,8];
         this.spriteTargets.push({id:o.id,left:o.x+box[0]*size/TILE,top:o.z+box[1]*size/TILE,right:o.x+box[2]*size/TILE,bottom:o.z+box[3]*size/TILE});
       }
       if(o.kind==='wood')this.tree(c,x,y,o.seed,o.small);
       else if(o.kind==='stone')this.stone(c,x,y,o.seed);
+      else if(o.kind==='clay'){rect(c,x-10,y-5,21,8,'#76533f');rect(c,x-7,y-10,15,8,'#a67555');rect(c,x-3,y-12,8,4,'#c18b65');}
+      else if(o.kind==='fiber'){for(let j=0;j<7;j++){rect(c,x-8+j*3,y-11-(j%3),1,12+(j%3),'#496d3f');rect(c,x-9+j*3,y-10-(j%2)*3,3,3,'#8ead59');}}
       else if(o.kind==='house')this.house(c,x,y,o.variant,o.tiny);
+      else if(o.kind==='field'){rect(c,x-13,y-13,27,22,'#6b5b38');for(let j=0;j<4;j++){rect(c,x-11,y-10+j*5,23,2,'#b49752');for(let k=0;k<5;k++)rect(c,x-9+k*5,y-13+j*5,2,5,o.progress>.55?'#c6b454':'#6f984b');}}
+      else if(o.kind==='pasture'){rect(c,x-13,y-12,27,21,'#749453');for(let j=0;j<5;j++){rect(c,x-13+j*6,y-13,2,23,'#d0b678');}rect(c,x-13,y-13,27,2,'#d0b678');rect(c,x-13,y+8,27,2,'#d0b678');for(let j=0;j<Math.min(4,o.animals);j++){rect(c,x-9+j*6,y-5+(j%2)*6,5,4,'#e2ddbd');rect(c,x-5+j*6,y-4+(j%2)*6,2,2,'#776d55');}}
       else if(o.kind==='ruin')this.ruin(c,x,y);
       else if(o.kind==='person')this.person(c,x,y,o.color,o.you,time&&(!o.player||o.moving)?Math.floor(time*(o.player?7:1.2)+(o.seed||0))%2:0,o.role,o.hungry);
       else if(o.kind==='cart')this.cart(c,x,y,o,time);
@@ -377,6 +400,10 @@ export class Map2D {
         const p=LANDMARKS.find(t=>t[0]===id);if(selected===id)continue;
         const [x,y]=this.project(p[1],p[2]+2),population=state?.npcs?.filter(n=>n.village===id).length;
         this.label(p[3]+(population!==undefined?` · ${population}`:''),x,y,false,true);
+      }
+      for(const id of ['market','mistwood','highland']){
+        const p=LANDMARKS.find(t=>t[0]===id);if(selected===id)continue;
+        const [x,y]=this.project(p[1],p[2]+1.7);this.label(p[3],x,y,false,false);
       }
       if(!state){const [x,y]=this.project(7,23.8);this.label('Nơi câu chuyện bắt đầu',x,y);}
     }

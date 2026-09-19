@@ -25,6 +25,9 @@
       <section class="map-shell" aria-label="Thế giới đang sống">
         <div id="world" aria-label="Bản đồ pixel nhìn từ trên xuống. Kéo để khám phá, cuộn để thu phóng. Dùng WASD hoặc các phím mũi tên để di chuyển."></div>
         <div class="map-caption"><span class="live-dot" aria-hidden="true"></span>THUNG LŨNG ĐẦU TIÊN <span class="map-caption-detail">/ BẢN ĐỒ THẾ GIỚI</span></div>
+        <nav class="region-nav" aria-label="Các vùng trên bản đồ">
+          <button data-region="home">Thung lũng</button><button data-region="mistwood">Rừng Sương</button><button data-region="highland">Cao nguyên</button>
+        </nav>
         <div class="camera-tools" role="toolbar" aria-label="Điều khiển bản đồ">
           <button id="zoom-out" title="Thu nhỏ" aria-label="Thu nhỏ bản đồ">−</button>
           <output id="zoom-level" aria-label="Mức thu phóng">100%</output>
@@ -92,6 +95,9 @@
           <option value="west">Làng Thượng</option>
           <option value="east">Làng Hạ</option>
           <option value="ruin">Tàn tích</option>
+          <option value="market">Chợ Phiên</option>
+          <option value="mistwood">Rừng Sương</option>
+          <option value="highland">Cao nguyên Đỏ</option>
         </select>
         <h2 id="selection-title">Nơi trú ẩn</h2>
         <p id="selection-description">
@@ -107,6 +113,8 @@
             <option value="wood">Gỗ</option>
             <option value="stone">Đá</option>
             <option value="food">Thức ăn</option>
+            <option value="fiber">Sợi cỏ</option>
+            <option value="clay">Đất sét</option>
           </select>
           <label for="storage-amount">Số lượng</label
           ><input
@@ -128,6 +136,8 @@
           <select id="build-kind">
             <option value="storehouse">Kho cá nhân · 4 gỗ + 2 đá</option>
             <option value="house">Nhà nhỏ · 6 gỗ + 2 đá</option>
+            <option value="field">Ruộng canh tác · 4 gỗ + 1 đá + 2 sợi</option>
+            <option value="pasture">Chuồng nuôi · 6 gỗ + 2 đá + 4 sợi</option>
           </select>
           <p id="build-benefit">Cất tối đa 80 đơn vị. Chỉ bạn được lấy hàng.</p>
           <p>Chọn ô trên bản đồ hoặc nhập tọa độ ô:</p>
@@ -137,7 +147,7 @@
                 id="build-x"
                 type="number"
                 min="2"
-                max="29"
+                max="45"
                 step="1"
                 value="10" /></label
             ><label
@@ -145,7 +155,7 @@
                 id="build-z"
                 type="number"
                 min="2"
-                max="29"
+                max="45"
                 step="1"
                 value="22"
             /></label>
@@ -172,6 +182,8 @@
             <span><i class="resource-icon wood-icon" aria-hidden="true"></i>Gỗ <b id="wood">0</b></span
             ><span><i class="resource-icon stone-icon" aria-hidden="true"></i>Đá <b id="stone">0</b></span
             ><span><i class="resource-icon food-icon" aria-hidden="true"></i>Thức ăn <b id="food">0</b></span>
+            <span><i class="resource-icon fiber-icon" aria-hidden="true"></i>Sợi <b id="fiber">0</b></span
+            ><span><i class="resource-icon clay-icon" aria-hidden="true"></i>Đất sét <b id="clay">0</b></span>
           </div>
         </div>
         <div class="controls">

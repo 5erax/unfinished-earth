@@ -41,6 +41,7 @@ export function createGameServer({
                     cooldowns: p.cooldowns || {},
                     focusUntil: p.focusUntil || 0,
                     discoveries: p.discoveries,
+                    trades: p.trades || 0,
                     moveSeq: p.moveSeq || 0,
                   }
                 : {}),
