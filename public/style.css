@@ -1428,3 +1428,79 @@ dialog .class-card small { font-size: 11px; line-height: 1.6; color: #c2c9b7; ma
   .valley-cart-summary span { text-align: left; }
   .valley-input-row button { min-width: 92px; padding: 8px; }
 }
+
+/* Stable HUD docks keep controls readable as the world grows. */
+@media (min-width: 901px) {
+  .left-rail { overflow: hidden; }
+  .left-rail > .mission {
+    flex: 0 0 min(52%, 420px);
+    min-height: 250px;
+    overflow-y: auto;
+  }
+  .left-rail > .valley-pulse {
+    flex: 0 1 190px;
+    max-height: 190px;
+    overflow-y: auto;
+  }
+  .left-rail > .chronicle {
+    flex: 1 1 170px;
+    min-height: 150px;
+    overflow: hidden;
+  }
+  .left-rail > .chronicle #events {
+    max-height: calc(100% - 88px);
+  }
+}
+.camera-tools {
+  top: 12px;
+  right: 12px;
+  left: auto;
+}
+.region-nav {
+  top: 43px;
+  left: 14px;
+  max-width: calc(100% - 28px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.region-nav::-webkit-scrollbar { display: none; }
+.map-hint { display: none; }
+#world-hint {
+  left: 14px;
+  bottom: 14px;
+  width: min(390px, 42%);
+  max-width: min(390px, 42%);
+  min-height: 39px;
+  display: flex;
+  align-items: center;
+}
+.skill-bar {
+  right: 58px;
+  left: auto;
+  bottom: 14px;
+  max-width: min(480px, 48%);
+}
+.map-compass {
+  right: 18px;
+  bottom: 72px;
+}
+#toast {
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.bag > .eyebrow b {
+  display: block;
+  margin: 2px 0 0;
+  color: #9fc3a3;
+  font-size: 9px;
+  letter-spacing: .3px;
+}
+@media (max-width: 900px) {
+  .camera-tools { top: 88px; right: auto; left: 10px; }
+  .region-nav { top: 44px; left: 10px; max-width: calc(100% - 20px); }
+  #world-hint { left: 10px; bottom: 104px; width: calc(100% - 20px); max-width: none; }
+  .skill-bar { left: 10px; right: auto; bottom: 55px; max-width: calc(100% - 20px); }
+  .map-compass { right: 18px; bottom: 154px; }
+  #toast { bottom: 154px; }
+}

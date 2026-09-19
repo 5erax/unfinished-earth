@@ -24,9 +24,9 @@
       </header>
       <section class="map-shell" aria-label="Thế giới đang sống">
         <div id="world" aria-label="Bản đồ pixel nhìn từ trên xuống. Kéo để khám phá, cuộn để thu phóng. Dùng WASD hoặc các phím mũi tên để di chuyển."></div>
-        <div class="map-caption"><span class="live-dot" aria-hidden="true"></span>THUNG LŨNG ĐẦU TIÊN <span class="map-caption-detail">/ BẢN ĐỒ THẾ GIỚI</span></div>
+        <div class="map-caption"><span class="live-dot" aria-hidden="true"></span>THUNG LŨNG ĐẦU TIÊN <span class="map-caption-detail">/ THẾ GIỚI 64×64 · 64 NGUỒN TÀI NGUYÊN</span></div>
         <nav class="region-nav" aria-label="Các vùng trên bản đồ">
-          <button data-region="home">Thung lũng</button><button data-region="mistwood">Rừng Sương</button><button data-region="highland">Cao nguyên</button>
+          <button data-region="home">Thung lũng</button><button data-region="mistwood">Rừng Sương</button><button data-region="highland">Cao nguyên</button><button data-region="farreach">Biên Viễn</button>
         </nav>
         <div class="camera-tools" role="toolbar" aria-label="Điều khiển bản đồ">
           <button id="zoom-out" title="Thu nhỏ" aria-label="Thu nhỏ bản đồ">−</button>
@@ -98,6 +98,7 @@
           <option value="market">Chợ Phiên</option>
           <option value="mistwood">Rừng Sương</option>
           <option value="highland">Cao nguyên Đỏ</option>
+          <option value="farreach">Biên Viễn</option>
         </select>
         <h2 id="selection-title">Nơi trú ẩn</h2>
         <p id="selection-description">
@@ -121,7 +122,7 @@
             id="storage-amount"
             type="number"
             min="1"
-            max="40"
+            max="64"
             step="1"
             value="1"
           />
@@ -147,7 +148,7 @@
                 id="build-x"
                 type="number"
                 min="2"
-                max="45"
+                max="61"
                 step="1"
                 value="10" /></label
             ><label
@@ -155,7 +156,7 @@
                 id="build-z"
                 type="number"
                 min="2"
-                max="45"
+                max="61"
                 step="1"
                 value="22"
             /></label>
@@ -177,7 +178,7 @@
       </aside>
       <footer class="toolbar panel">
         <div class="bag">
-          <span class="eyebrow">TRONG TÚI</span>
+          <span class="eyebrow">TRONG TÚI <b id="bag-capacity">0/64</b></span>
           <div>
             <span><i class="resource-icon wood-icon" aria-hidden="true"></i>Gỗ <b id="wood">0</b></span
             ><span><i class="resource-icon stone-icon" aria-hidden="true"></i>Đá <b id="stone">0</b></span

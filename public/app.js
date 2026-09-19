@@ -17,6 +17,7 @@ let sendingMove = false,
 const held = new Map();
 import {
   BUILDINGS,
+  BAG_CAPACITY,
   ITEMS,
   CLASSES,
   cartPosition, settlementSummary, DAY_MS,
@@ -41,6 +42,7 @@ const P = {
   market: { x: 36, z: 10 },
   mistwood: { x: 8, z: 40 },
   highland: { x: 40, z: 32 },
+  farreach: { x: 54, z: 48 },
 };
 const copy = {
   home: [
@@ -86,6 +88,10 @@ const copy = {
   highland: [
     "Cao nguyên Đỏ",
     "Vùng đất rộng cho trang trại và chăn nuôi. Đá cùng đất sét hình thành chậm hơn cây cỏ, đặc biệt trong mùa hạn.",
+  ],
+  farreach: [
+    "Biên Viễn",
+    "Vùng đất xa nhất của bản đồ 64×64. Tài nguyên thưa nhưng trữ lượng lớn, thích hợp mở khu sản xuất quy mô rộng.",
   ],
 };
 let state = null,
@@ -579,6 +585,7 @@ function updateQuest() {
   const foundRuin = p.discoveries.includes("ruin");
   const foundMistwood = p.discoveries.includes("mistwood");
   const foundHighland = p.discoveries.includes("highland");
+  const foundFarreach = p.discoveries.includes("farreach");
   const milestones = [
     { label: "Thu thập 8 gỗ và 4 đá", done: state.bridge || (p.bag.wood >= 8 && p.bag.stone >= 4) },
     { label: "Sửa cầu qua sông", done: state.bridge },
@@ -589,6 +596,7 @@ function updateQuest() {
     { label: "Khám phá tàn tích", done: foundRuin },
     { label: "Khảo sát Rừng Sương", done: foundMistwood },
     { label: "Khảo sát Cao nguyên Đỏ", done: foundHighland },
+    { label: "Mở bản đồ Biên Viễn", done: foundFarreach },
     { label: "Xây ruộng canh tác", done: hasField },
     { label: "Dựng chuồng chăn nuôi", done: hasPasture },
     { label: "Trao đổi tại Chợ Phiên", done: (p.trades || 0) > 0 },
@@ -693,6 +701,10 @@ function updateQuest() {
     title = "Vượt sang Cao nguyên Đỏ";
     hint = "Qua cầu rồi đi về phía đông nam. Cao nguyên có đất rộng, đá và đất sét cho khu sản xuất mới.";
     questTarget = "highland";
+  } else if (!foundFarreach) {
+    title = "Chạm tới Biên Viễn";
+    hint = "Theo đường cao nguyên về phía đông nam để mở vùng đất xa nhất của thế giới 64×64.";
+    questTarget = "farreach";
   } else if (!hasField) {
     title = "Mở rộng mùa vụ";
     hint = "Xây ruộng canh tác với 4 gỗ, 1 đá và 2 sợi cỏ. NPC trồng trọt sẽ tự đến làm việc.";
@@ -825,6 +837,7 @@ function renderUI() {
   $("coordinates").textContent = `${Math.round(p.x * 16)} / ${Math.round(p.z * 16)} m`;
   for (const kind of Object.keys(ITEMS))
     $(kind).textContent = p.bag[kind] || 0;
+  $("bag-capacity").textContent = `${Object.values(p.bag).reduce((sum, amount) => sum + amount, 0)}/${BAG_CAPACITY}`;
   $("save").textContent = !online ? "Đang chờ kết nối" : busy || recovering || hasPending() ? "Đang lưu thay đổi…" : "Tiến độ đã được lưu";
   $("credit").textContent =
     `Tín dụng offline: ${Math.floor(state.creditMs / 60000)} / 480 phút`;
@@ -857,7 +870,7 @@ function renderUI() {
       ]
     : copy[selected]) || [
     ({ wood: "Rừng cây", stone: "Mỏ đá", fiber: "Bãi sợi cỏ", clay: "Bãi đất sét" }[r?.type] || "Nguồn tài nguyên"),
-    `Còn ${r?.remaining ?? 0}/${r?.capacity ?? 0} đơn vị. ${r?.remaining ? "Nguồn phục hồi theo thời tiết và sức khỏe môi trường." : `Đang tái tạo tự nhiên ${Math.round((r?.regrowth || 0) * 100)}%.`} Túi tối đa 40.`,
+    `Còn ${r?.remaining ?? 0}/${r?.capacity ?? 0} đơn vị. ${r?.remaining ? "Nguồn phục hồi theo thời tiết và sức khỏe môi trường." : `Đang tái tạo tự nhiên ${Math.round((r?.regrowth || 0) * 100)}%.`} Túi tối đa ${BAG_CAPACITY}.`,
   ];
   $("selection-title").textContent = title;
   const focus = selected === "bridge" ? { x: 14, z: 17 } : target();
@@ -938,7 +951,7 @@ function renderUI() {
       { type: "explore" },
       p.discoveries.includes("ruin"),
     );
-  if (selected === "mistwood" || selected === "highland")
+  if (["mistwood", "highland", "farreach"].includes(selected))
     action(
       p.discoveries.includes(selected) ? "Vùng đã được khảo sát" : "Khảo sát và mở bản đồ vùng",
       { type: "survey-region", target: selected },
@@ -1129,6 +1142,7 @@ chronicleUI = createChronicleUI({
   },
   onOpen: stopMovement,
 });
+document.querySelector(".left-rail").scrollTop = 0;
 await poll();
 setInterval(() => {
   if (!document.hidden) poll();
