@@ -170,6 +170,14 @@ a:focus-visible {
 .mission {
   padding: 17px 15px;
 }
+.mission.chapter-changed {
+  animation: chapter-arrival .65s ease-out;
+}
+@keyframes chapter-arrival {
+  0% { box-shadow: 0 0 0 1px #dabd72, 0 0 0 rgba(218, 189, 114, 0); transform: translateY(2px); }
+  55% { box-shadow: 0 0 0 1px #dabd72, 0 0 26px rgba(218, 189, 114, .25); }
+  100% { box-shadow: inset 0 1px #ffffff05, 0 3px #071019; transform: translateY(0); }
+}
 .eyebrow {
   color: var(--gold);
   font-size: 10px;
@@ -216,12 +224,29 @@ a:focus-visible {
   line-height: 1.5;
   margin: 19px 0;
 }
+.quest-progress-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 13px;
+  color: #9ccfb8;
+  font-size: 9px;
+  letter-spacing: .25px;
+}
+#quest-journey {
+  color: #839894;
+  text-align: right;
+}
 .mission li {
   counter-increment: step;
   margin: 11px 0;
   display: flex;
   gap: 9px;
   align-items: center;
+  min-height: 31px;
+  padding: 3px 5px 3px 0;
+  border-radius: 2px;
+  transition: color .2s ease, background .2s ease, opacity .2s ease;
 }
 .mission li::before {
   content: counter(step);
@@ -244,6 +269,32 @@ a:focus-visible {
   content: "\2713";
   background: #365743;
   color: #c4dfa9;
+}
+.mission li.current {
+  color: #f1e8ce;
+  background: linear-gradient(90deg, rgba(215, 184, 111, .13), transparent);
+}
+.mission li.current::before {
+  border-color: #d7b86f;
+  color: #f1d692;
+}
+.mission li.pending {
+  color: #7f928e;
+  opacity: .68;
+}
+.mission .objective-copy {
+  flex: 1;
+}
+.mission li small {
+  color: #82948f;
+  font-size: 7px;
+  letter-spacing: .55px;
+  white-space: nowrap;
+}
+.mission li.current small { color: #d7b86f; }
+.mission li.done small { color: #86b98f; }
+@media (prefers-reduced-motion: reduce) {
+  .mission.chapter-changed { animation: none; }
 }
 .villages {
   border-top: 1px solid var(--line);

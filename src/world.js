@@ -174,6 +174,7 @@ export function createWorld(now = Date.now()) {
     eventSeq: 0,
     events: [],
     deliveries: 0,
+    eastDeliveries: 0,
     harvests: 0,
   };
   for (let i = 0; i < 34; i++) {
@@ -457,6 +458,7 @@ function advanceCart(w, elapsedMs, working) {
         cart.cargo = 0;
         cart.loadCause = null;
         w.deliveries++;
+        if (cart.target === "east") w.eastDeliveries = (w.eastDeliveries || 0) + 1;
         cart.leg = "return";
         cart.route = [...cart.route].reverse();
         cart.status = "returning";
@@ -793,6 +795,7 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       [],
     );
     rememberFood(v, "foodLots", amount, cause);
+    if (cmd.target === "east") w.eastDeliveries = (w.eastDeliveries || 0) + 1;
     message = "Đã giao thức ăn.";
   } else if (cmd.type === "explore") {
     near(p, POINTS.ruin);

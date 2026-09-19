@@ -552,7 +552,42 @@ for (const [id, direction] of [
 let questTarget = "home-wood";
 function updateQuest() {
   const p = state.players[state.you];
+  const events = state.events || [];
   const ownBuildings = (state.buildings || []).filter(b => b.owner === state.you);
+  const delivered = (state.eastDeliveries || 0) > 0 || events.some(e => e.kind === "food" && e.place === "east");
+  const hasHouse = ownBuildings.some(b => b.kind === "house");
+  const hasStorehouse = ownBuildings.some(b => b.kind === "storehouse");
+  const foundRuin = p.discoveries.includes("ruin");
+  const milestones = [
+    { label: "Thu thập 8 gỗ và 4 đá", done: state.bridge || (p.bag.wood >= 8 && p.bag.stone >= 4) },
+    { label: "Sửa cầu qua sông", done: state.bridge },
+    { label: "Đưa thức ăn đến Làng Hạ", done: delivered },
+    { label: "Điều tiết cống tưới", done: Boolean(state.gateCause) },
+    { label: "Dựng một căn nhà", done: hasHouse },
+    { label: "Xây kho cá nhân", done: hasStorehouse },
+    { label: "Khám phá tàn tích", done: foundRuin },
+  ];
+  const chapters = [
+    {
+      id: "01",
+      title: "NỐI LẠI HAI BỜ",
+      summary: "Cầu gãy khiến lương thực không đến được Làng Hạ. Hãy mở lại tuyến đường và tiếp tế cho cộng đồng bên kia sông.",
+      objectives: milestones.slice(0, 3),
+    },
+    {
+      id: "02",
+      title: "GÂY DỰNG THUNG LŨNG",
+      summary: "Hai làng đã nối lại. Khơi dòng nước, dựng chỗ ở và chuẩn bị kho dự trữ để cộng đồng có thể lớn lên.",
+      objectives: milestones.slice(3, 6),
+    },
+    {
+      id: "03",
+      title: "DẤU VẾT CỦA DÒNG SÔNG",
+      summary: "Thung lũng đã đứng vững. Hãy tìm câu chuyện còn nằm lại bên kia sông rồi chăm lo cho đời sống của hai làng.",
+      objectives: milestones.slice(6),
+    },
+  ];
+  const chapter = !milestones[2].done ? chapters[0] : !milestones[5].done ? chapters[1] : chapters[2];
   let title, hint;
   if (!state.bridge) {
     if (p.bag.wood < 8) {
@@ -578,10 +613,7 @@ function updateQuest() {
       hint = "Đủ 8 gỗ và 4 đá. Đến bờ tây, sửa cầu để nối hai làng.";
       questTarget = "bridge";
     }
-  } else if (
-    p.bag.food > 0 || (!state.deliveries &&
-    !state.events.some((e) => e.kind === "food" && e.place === "east"))
-  ) {
+  } else if (!delivered) {
     title = p.bag.food ? "Mang thức ăn qua sông" : "Lấy lương thực";
     hint = p.bag.food
       ? "Đến Làng Hạ và giao khẩu phần. Cây cầu đã mở một đường sống mới."
@@ -599,16 +631,24 @@ function updateQuest() {
     questTarget = "gate";
     const needed=p.bag.wood<4?"wood":p.bag.stone<2?"stone":null;
     if(needed){questTarget=state.resources.filter(r=>r.type===needed&&r.remaining>0).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]?.id;hint=`Cần thêm ${needed==="wood"?4-p.bag.wood:2-p.bag.stone} ${needed==="wood"?"gỗ":"đá"} để mở cống. Dẫn đường sẽ đưa bạn tới nguồn còn hàng.`;}
-  } else if (!ownBuildings.some(b => b.kind === "house")) {
+  } else if (!hasHouse) {
     title = "Dựng một nơi để ở lại";
     hint =
       "Một căn nhà cần 6 gỗ và 2 đá, thêm 2 chỗ ở. Xây gần làng có đủ thức ăn để đón người đến.";
-    questTarget = null;
-  } else if (!ownBuildings.some(b => b.kind === "storehouse")) {
+    const needed = p.bag.wood < 6 ? "wood" : p.bag.stone < 2 ? "stone" : null;
+    questTarget = needed
+      ? state.resources.filter(r => r.type === needed && r.remaining > 0).sort((a,b) => Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]?.id
+      : null;
+    if (needed) hint = `Cần thêm ${needed === "wood" ? 6 - p.bag.wood : 2 - p.bag.stone} ${needed === "wood" ? "gỗ" : "đá"}. Dẫn đường sẽ tìm nguồn gần nhất còn vật liệu.`;
+  } else if (!hasStorehouse) {
     title = "Dành dụm cho ngày mai";
     hint = "Xây kho với 4 gỗ và 2 đá. Cất bớt vật liệu để túi còn chỗ cho chuyến tiếp tế.";
-    questTarget = null;
-  } else if (!p.discoveries.includes("ruin")) {
+    const needed = p.bag.wood < 4 ? "wood" : p.bag.stone < 2 ? "stone" : null;
+    questTarget = needed
+      ? state.resources.filter(r => r.type === needed && r.remaining > 0).sort((a,b) => Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]?.id
+      : null;
+    if (needed) hint = `Cần thêm ${needed === "wood" ? 4 - p.bag.wood : 2 - p.bag.stone} ${needed === "wood" ? "gỗ" : "đá"} để dựng kho.`;
+  } else if (!foundRuin) {
     title = "Đọc dấu tích bên kia sông";
     hint = "Đến tàn tích để tìm hiểu mực nước cũ. Những quyết định hôm nay sẽ trở thành câu chuyện của thung lũng.";
     questTarget = "ruin";
@@ -620,20 +660,41 @@ function updateQuest() {
       : "Giữ nguồn nước, lương thực và chỗ ở cân bằng. Mỗi thay đổi của bạn đều để lại dấu vết trong biên niên sử.";
     questTarget = village.foodDays < 2 ? (p.bag.food ? village.id : "depot") : "overview";
   }
-  $("chapter-label").textContent = state.gateCause ? "CHƯƠNG 02" : "CHƯƠNG 01";
+  const missionPanel = document.querySelector(".mission");
+  const previousChapter = missionPanel.dataset.chapter;
+  if (previousChapter && previousChapter !== chapter.id) {
+    missionPanel.classList.remove("chapter-changed");
+    void missionPanel.offsetWidth;
+    missionPanel.classList.add("chapter-changed");
+    toast(`Chương ${chapter.id} đã mở: ${chapter.title.toLowerCase()}.`);
+  }
+  missionPanel.dataset.chapter = chapter.id;
+  $("chapter-label").textContent = `CHƯƠNG ${chapter.id}`;
+  $("quest-summary").textContent = chapter.summary;
   $("quest-title").textContent = title;
   $("quest-hint").textContent = hint;
   $("quest-go").textContent = questTarget === "overview" ? "Quan sát thung lũng →" : questTarget
     ? "Dẫn đường đến mục tiêu →"
     : "Mở xây dựng →";
-  const done =
-    (state.bridge ? 2 : p.bag.wood >= 8 && p.bag.stone >= 4 ? 1 : 0) +
-    (state.deliveries > 0 || state.events.some(e => e.kind === "food" && e.place === "east") ? 1 : 0) +
-    (state.gateCause ? 1 : 0) +
-    (ownBuildings.some(b => b.kind === "house") ? 1 : 0) +
-    (ownBuildings.some(b => b.kind === "storehouse") ? 1 : 0) +
-    (p.discoveries.includes("ruin") ? 1 : 0);
-  $("quest-progress").textContent = `${done} / 7 cột mốc đã đạt`;
+  const chapterDone = chapter.objectives.filter(objective => objective.done).length;
+  const totalDone = milestones.filter(milestone => milestone.done).length;
+  $("quest-progress").textContent = chapterDone === chapter.objectives.length
+    ? "Chương đã hoàn thành"
+    : `${chapterDone} / ${chapter.objectives.length} nhiệm vụ chương`;
+  $("quest-journey").textContent = `Hành trình ${totalDone} / ${milestones.length}`;
+  const firstOpen = chapter.objectives.findIndex(objective => !objective.done);
+  $("objectives").replaceChildren(...chapter.objectives.map((objective, index) => {
+    const item = document.createElement("li");
+    item.className = objective.done ? "done" : index === firstOpen ? "current" : "pending";
+    if (index === firstOpen) item.setAttribute("aria-current", "step");
+    const copy = document.createElement("span");
+    copy.className = "objective-copy";
+    copy.textContent = objective.label;
+    const status = document.createElement("small");
+    status.textContent = objective.done ? "HOÀN THÀNH" : index === firstOpen ? "ĐANG LÀM" : "TIẾP THEO";
+    item.append(copy, status);
+    return item;
+  }));
 }
 $("quest-go").onclick = () => {
   if (questTarget === "overview") { valleyUI.open(); return; }
@@ -710,15 +771,6 @@ function renderUI() {
   $("save").textContent = !online ? "Đang chờ kết nối" : busy || recovering || hasPending() ? "Đang lưu thay đổi…" : "Tiến độ đã được lưu";
   $("credit").textContent =
     `Tín dụng offline: ${Math.floor(state.creditMs / 60000)} / 480 phút`;
-  const complete = [
-    state.bridge || (p.bag.wood >= 8 && p.bag.stone >= 4),
-    state.bridge,
-    state.deliveries > 0 ||
-      state.events.some((e) => e.kind === "food" && e.place === "east"),
-  ];
-  [...$("objectives").children].forEach((li, i) =>
-    li.classList.toggle("done", complete[i]),
-  );
   updateQuest();
   $("villages").replaceChildren();
   for (const v of state.villages) {

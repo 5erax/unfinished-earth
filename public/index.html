@@ -49,18 +49,17 @@
       <section class="mission panel">
         <div class="panel-kicker"><span class="pixel-star" aria-hidden="true">✦</span><span class="eyebrow" id="chapter-label">CHƯƠNG 01</span><span class="chapter-tag">NHIỆM VỤ</span></div>
         <h1 id="quest-title">Một cây cầu.<br />Nhiều cuộc đời.</h1>
-        <p>
+        <p id="quest-summary">
           Cầu gãy khiến lương thực không đến được Làng Hạ. Hãy mở lại tuyến
           đường và xem thung lũng đổi thay.
         </p>
         <p id="quest-hint"></p>
         <button id="quest-go" class="primary">Dẫn đường đến mục tiêu →</button>
-        <div id="quest-progress"></div>
-        <ol id="objectives">
-          <li>Thu thập 8 gỗ và 4 đá</li>
-          <li>Sửa cầu qua sông</li>
-          <li>Đưa thức ăn đến Làng Hạ</li>
-        </ol>
+        <div class="quest-progress-row">
+          <div id="quest-progress"></div>
+          <div id="quest-journey"></div>
+        </div>
+        <ol id="objectives" aria-label="Mục tiêu của chương hiện tại"></ol>
         <div class="villages" id="villages"></div>
         <div id="sync-panel" hidden role="status" aria-live="polite">
           <p id="sync-message"></p>
