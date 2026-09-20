@@ -41,6 +41,13 @@ export function view(w, id, now, speed) {
                 stats: p.stats || {},
                 unspentPower: p.unspentPower || 0,
                 powers: p.powers || {},
+                talents: p.talents || {},
+                talentPoints: p.talentPoints || 0,
+                hp: p.hp,
+                maxHp: p.maxHp,
+                equipment: p.equipment || {},
+                combatCooldowns: p.combatCooldowns || {},
+                kills: p.kills || 0,
                 moveSeq: p.moveSeq || 0,
               }
             : {}),

@@ -37,6 +37,27 @@ export const ITEMS = {
   seed: "hạt giống", grain: "ngũ cốc", vegetable: "rau củ", fruit: "trái cây",
   herb: "thảo dược", wool: "len", milk: "sữa", egg: "trứng", leather: "da thuộc",
   ore: "quặng", tool: "công cụ", plank: "ván gỗ", brick: "gạch nung",
+  sword: "kiếm", bow: "cung", spear: "giáo",
+};
+export const TALENTS = {
+  vitality: { name: "Sinh lực", branch: "Sinh tồn", max: 5, detail: "+10 máu mỗi điểm" },
+  hunter: { name: "Thợ săn", branch: "Chiến đấu", max: 5, detail: "+2 sát thương mỗi điểm" },
+  swift: { name: "Nhanh tay", branch: "Chiến đấu", max: 3, detail: "Giảm 8% hồi chiêu mỗi điểm" },
+  naturalist: { name: "Hiểu tự nhiên", branch: "Sinh tồn", max: 4, detail: "Tăng chiến lợi phẩm và khả năng quan sát" },
+  cultivator: { name: "Nhà canh tác", branch: "Sản xuất", max: 5, detail: "+1 sản lượng mỗi điểm" },
+};
+export const COMBAT_SKILLS = {
+  strike: { name: "Đánh thường", cooldown: 1200, multiplier: 1, range: 2.5 },
+  cleave: { name: "Quét rộng", cooldown: 5000, multiplier: 1.8, range: 2.8 },
+  volley: { name: "Loạt tên", cooldown: 6500, multiplier: 1.55, range: 7 },
+};
+export const WILDLIFE = {
+  deer: { name: "Hươu", hp: 34, speed: .7, diet: "grass", temperament: "prey" },
+  boar: { name: "Lợn rừng", hp: 48, speed: .55, diet: "plants", temperament: "defensive" },
+  wolf: { name: "Sói", hp: 58, speed: .9, diet: "meat", temperament: "predator" },
+  rabbit: { name: "Thỏ", hp: 18, speed: 1.1, diet: "grass", temperament: "prey" },
+  bear: { name: "Gấu", hp: 90, speed: .45, diet: "mixed", temperament: "predator" },
+  fish: { name: "Cá sông", hp: 12, speed: .8, diet: "algae", temperament: "aquatic" },
 };
 export const CROPS = {
   grain: { name: "Lúa", item: "grain", moisture: .48, days: 3, yield: 7 },
@@ -266,6 +287,14 @@ export function ensureWorld(w) {
     p.achievements ??= [];
     p.stats ??= { gathered: 0, built: 0, harvested: 0, traded: 0, explored: 0 };
     p.profession ??= { tier: 1, title: CLASSES[p.classId]?.name || "Người khai phá" };
+    p.talents ??= Object.fromEntries(Object.keys(TALENTS).map(key => [key, 0]));
+    for (const key of Object.keys(TALENTS)) p.talents[key] ??= 0;
+    p.talentPoints ??= p.unspentPower || 0;
+    p.maxHp = 100 + (p.talents.vitality || 0) * 10;
+    p.hp = Math.min(p.maxHp, p.hp ?? p.maxHp);
+    p.equipment ??= { weapon: null };
+    p.combatCooldowns ??= {};
+    p.kills ??= 0;
     p.powers = { gather: Math.floor((p.level || 1) / 5), production: Math.floor((p.level || 1) / 7), trade: Math.floor((p.level || 1) / 10) };
   }
   for (const n of w.npcs || []) if (!Number.isFinite(n.workX) || !Number.isFinite(n.workZ)) {
@@ -317,6 +346,17 @@ export function ensureWorld(w) {
   w.developments ??= [];
   w.worldEra ??= Math.max(1, Math.floor((w.day || 1) / 360) + 1);
   w.biodiversity ??= { crops: ["grain"], livestock: ["chicken"], mutations: 0 };
+  w.wildlife ??= Array.from({ length: 42 }, (_, i) => {
+    const type = ["deer","rabbit","boar","fish","deer","wolf","rabbit","bear"][i % 8];
+    const aquatic = type === "fish";
+    const x = aquatic ? 15.4 + (i % 3) * .55 : 3 + ((i * 19 + 7) % 88);
+    const z = aquatic ? 4 + ((i * 13) % 78) : 3 + ((i * 31 + 11) % 88);
+    return { id: `wild-${i + 1}`, type, x, z, hp: WILDLIFE[type].hp, hunger: 25 + i % 50, thirst: 20 + i % 45, state: "foraging", respawnDay: 0 };
+  });
+  for (const animal of w.wildlife) {
+    const def = WILDLIFE[animal.type] || WILDLIFE.rabbit;
+    animal.hp ??= def.hp; animal.hunger ??= 30; animal.thirst ??= 30; animal.state ??= "foraging"; animal.respawnDay ??= 0;
+  }
   w.expansionVersion = 2;
   return w;
 }
@@ -431,7 +471,7 @@ export const ACHIEVEMENTS = [
   { id: "founder", name: "Mầm đế chế", detail: "Xây 20 công trình", stat: "built", value: 20, reward: { xp: 180, brick: 12 } },
 ];
 function progressPlayer(w, p, cmd, amount = 1) {
-  const xpByType = { gather: 3, build: 18, harvest: 14, "collect-building": 10, trade: 8, "npc-trade": 10, "survey-region": 20, demolish: 4, craft: 12, "configure-production": 3 };
+  const xpByType = { gather: 3, build: 18, harvest: 14, "collect-building": 10, trade: 8, "npc-trade": 10, "survey-region": 20, demolish: 4, craft: 12, "configure-production": 3, combat: 12 };
   const statByType = { gather: "gathered", build: "built", harvest: "harvested", "collect-building": "harvested", trade: "traded", "npc-trade": "traded", "survey-region": "explored" };
   if (!xpByType[cmd.type]) return;
   const stat = statByType[cmd.type];
@@ -444,7 +484,11 @@ function progressPlayer(w, p, cmd, amount = 1) {
     p.profession = { tier, title: (CAREERS[p.classId] || CAREERS.builder)[tier - 1] };
     event(w, "npc", `${p.name} đạt cấp ${p.level} và thăng nghề thành ${p.profession.title}.`, p.id);
   } else p.profession = { tier, title: (CAREERS[p.classId] || CAREERS.builder)[tier - 1] };
-  if (p.level > oldLevel) p.unspentPower = (p.unspentPower || 0) + (p.level - oldLevel);
+  if (p.level > oldLevel) {
+    const gained = p.level - oldLevel;
+    p.unspentPower = (p.unspentPower || 0) + gained;
+    p.talentPoints = (p.talentPoints || 0) + gained;
+  }
   p.powers = { gather: Math.floor(p.level / 5), production: Math.floor(p.level / 7), trade: Math.floor(p.level / 10) };
   for (const achievement of ACHIEVEMENTS) if (!p.achievements.includes(achievement.id) && (p.stats[achievement.stat] || 0) >= achievement.value) {
     p.achievements.push(achievement.id);
@@ -672,7 +716,46 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     "Lệnh không hợp lệ.",
   );
   let message = "", progressAmount = 1;
-  if (cmd.type === "character") {
+  if (cmd.type === "spend-talent") {
+    const talent = TALENTS[cmd.talent];
+    requireThat(talent, "Thiên phú không hợp lệ.");
+    requireThat((p.talentPoints || 0) > 0, "Bạn chưa có điểm thiên phú.");
+    requireThat((p.talents[cmd.talent] || 0) < talent.max, "Thiên phú đã đạt cấp tối đa.");
+    p.talents[cmd.talent]++; p.talentPoints--; p.unspentPower = Math.max(0, (p.unspentPower || 0) - 1);
+    p.maxHp = 100 + (p.talents.vitality || 0) * 10; p.hp = Math.min(p.maxHp, p.hp + (cmd.talent === "vitality" ? 10 : 0));
+    message = `Đã tăng ${talent.name} lên bậc ${p.talents[cmd.talent]}.`;
+  } else if (cmd.type === "equip-weapon") {
+    requireThat(["sword","bow","spear"].includes(cmd.weapon), "Vũ khí không hợp lệ.");
+    requireThat((p.bag[cmd.weapon] || 0) > 0, `Bạn chưa có ${ITEMS[cmd.weapon]}.`);
+    p.equipment.weapon = cmd.weapon;
+    message = `Đã trang bị ${ITEMS[cmd.weapon]}.`;
+  } else if (cmd.type === "combat") {
+    const animal = w.wildlife.find(a => a.id === cmd.target && a.hp > 0);
+    const skill = COMBAT_SKILLS[cmd.skill] || COMBAT_SKILLS.strike;
+    requireThat(animal, "Mục tiêu đã rời khỏi khu vực.");
+    const weapon = p.equipment?.weapon;
+    const range = weapon === "bow" ? Math.max(skill.range, 7) : skill.range;
+    requireThat(Math.hypot(p.x-animal.x,p.z-animal.z) <= range, "Mục tiêu ngoài tầm đánh.");
+    const reduction = Math.min(.24, (p.talents.swift || 0) * .08);
+    requireThat(now >= (p.combatCooldowns[cmd.skill] || 0), "Kỹ năng đang hồi.");
+    p.combatCooldowns[cmd.skill] = now + Math.round(skill.cooldown * (1-reduction));
+    const base = weapon === "sword" ? 13 : weapon === "bow" ? 11 : weapon === "spear" ? 12 : 6;
+    const damage = Math.round((base + (p.talents.hunter || 0) * 2) * skill.multiplier);
+    animal.hp = Math.max(0, animal.hp - damage); animal.state = "fleeing";
+    if (!animal.hp) {
+      animal.respawnDay = w.day + 4 + Math.floor(Math.random()*5); p.kills++;
+      const loot = animal.type === "fish" ? "food" : animal.type === "rabbit" ? "food" : "leather";
+      const count = 1 + Math.floor((p.talents.naturalist || 0) / 2);
+      const room = BAG_CAPACITY - Object.values(p.bag).reduce((a,b)=>a+b,0);
+      p.bag[loot] += Math.min(count, room);
+      event(w, "combat", `${p.name} hạ ${WILDLIFE[animal.type].name.toLowerCase()} và nhận ${Math.min(count, room)} ${ITEMS[loot]}.`, animal.id);
+      message = `${skill.name} gây ${damage} sát thương. Mục tiêu đã bị hạ.`;
+    } else {
+      const retaliation = ["predator","defensive"].includes(WILDLIFE[animal.type].temperament) && Math.hypot(p.x-animal.x,p.z-animal.z) <= 2.8 ? (animal.type === "bear" ? 11 : animal.type === "wolf" ? 8 : 5) : 0;
+      if (retaliation) p.hp = Math.max(1, p.hp-retaliation);
+      message = `${skill.name} gây ${damage} sát thương (${animal.hp}/${WILDLIFE[animal.type].hp} máu)${retaliation ? `; bạn chịu ${retaliation} sát thương phản công` : ""}.`;
+    }
+  } else if (cmd.type === "character") {
     const profile = characterProfile(cmd);
     near(p, POINTS.home);
     Object.assign(p, profile);
@@ -811,6 +894,9 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       plank: { cost: { wood: 2 }, output: ["plank", 3] },
       brick: { cost: { clay: 3, wood: 1 }, output: ["brick", 3] },
       ration: { cost: { grain: 2, vegetable: 1 }, output: ["food", 4] },
+      sword: { cost: { ore: 4, wood: 2, leather: 1 }, output: ["sword", 1] },
+      bow: { cost: { wood: 3, fiber: 3, leather: 1 }, output: ["bow", 1] },
+      spear: { cost: { wood: 3, ore: 2 }, output: ["spear", 1] },
     };
     const recipe = recipes[cmd.recipe]; requireThat(recipe, "Công thức không hợp lệ.");
     spend(p, recipe.cost); const [item, count] = recipe.output; p.bag[item] += count;
@@ -1097,6 +1183,31 @@ export function simulateDay(w, production = true) {
     Math.min(100, w.fish + (w.gate ? -5 : 3) + (w.weather === "Hạn" ? -2 : 0)),
   );
   w.grass = Math.max(0, Math.min(100, w.grass + 4 * w.moisture - 1.5));
+  for (const animal of w.wildlife) {
+    const def = WILDLIFE[animal.type] || WILDLIFE.rabbit;
+    if (animal.hp <= 0) {
+      if (w.day >= animal.respawnDay) { animal.hp = def.hp; animal.hunger = 25; animal.thirst = 20; animal.state = "foraging"; }
+      continue;
+    }
+    animal.hunger = Math.min(100, animal.hunger + (def.diet === "meat" ? 13 : 8));
+    animal.thirst = Math.min(100, animal.thirst + (w.weather === "Mưa lớn" ? -18 : 10));
+    animal.state = animal.thirst > 70 ? "seeking-water" : animal.hunger > 65 ? "foraging" : def.temperament === "predator" ? "hunting" : "resting";
+    if (animal.state === "seeking-water" && def.temperament !== "aquatic") animal.x += Math.sign(16-animal.x) * Math.min(1.2, Math.abs(16-animal.x));
+    else if (def.temperament !== "aquatic") {
+      const angle = ((w.day * 17 + Number(animal.id.split("-").at(-1))*47) % 360) * Math.PI/180;
+      animal.x = Math.max(2,Math.min(SIZE-3,animal.x+Math.cos(angle)*def.speed));
+      animal.z = Math.max(2,Math.min(SIZE-3,animal.z+Math.sin(angle)*def.speed));
+    }
+    if (animal.hunger >= 100 || animal.thirst >= 100) animal.hp = Math.max(1, animal.hp - 5);
+    if (def.diet === "meat" && animal.hunger > 70) {
+      const prey = w.wildlife.find(a => a.hp > 0 && WILDLIFE[a.type]?.temperament === "prey" && Math.hypot(a.x-animal.x,a.z-animal.z)<4);
+      if (prey) { prey.hp = Math.max(0, prey.hp-18); animal.hunger = Math.max(10, animal.hunger-45); animal.state = "hunting"; }
+    } else if (def.diet !== "meat") { animal.hunger = Math.max(5, animal.hunger - Math.max(2, w.grass/24)); w.grass = Math.max(0,w.grass-.04); }
+    if (def.temperament === "predator") for (const p of Object.values(w.players)) if (Math.hypot(p.x-animal.x,p.z-animal.z)<2.2) {
+      p.hp = Math.max(0,(p.hp ?? p.maxHp)- (animal.type === "bear" ? 14 : 9));
+      if (!p.hp) { Object.assign(p,POINTS.home); p.hp=p.maxHp; event(w,"combat",`${p.name} bị ${def.name.toLowerCase()} đánh gục và tỉnh lại tại nơi trú ẩn.`,p.id); }
+    }
+  }
   w.grazers = Math.max(
     0,
     Math.min(64, w.grazers + (w.grass > 40 ? 0.3 : -0.5)),

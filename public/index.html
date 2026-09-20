@@ -39,9 +39,20 @@
         </div>
         <div class="map-hint"><span class="hint-key">KÉO</span> khám phá <span class="hint-separator">·</span><span class="hint-key">CUỘN</span> thu phóng</div>
         <div class="map-compass" aria-hidden="true"><span>B</span>↑</div>
+        <nav class="panel-shortcuts" aria-label="Mở các bảng thông tin">
+          <button data-panel="quest-panel" aria-label="Mở nhiệm vụ" title="Nhiệm vụ">⚑</button>
+          <button data-panel="pulse-panel" aria-label="Mở nhịp sống" title="Nhịp sống">♥</button>
+          <button data-panel="chronicle-panel" aria-label="Mở biên niên sử" title="Biên niên sử">▤</button>
+          <button data-panel="place-panel" aria-label="Mở địa điểm" title="Địa điểm">⌖</button>
+        </nav>
         <div id="world-hint">Chọn cây hoặc mỏ đá để bắt đầu khám phá</div>
         <aside id="skill-bar" class="skill-bar panel" hidden aria-label="Kỹ năng nhân vật">
-          <span id="class-name"></span><button id="skill-collect" title="Gom tối đa 6 vật liệu trong 2 ô · hồi 30 giây">Q · Gom vật liệu</button><button id="skill-focus" title="Thu thập nhanh trong 15 giây · hồi 60 giây">R · Tập trung</button>
+          <div class="combat-vitals"><span id="class-name"></span><meter id="player-hp" min="0" max="100"></meter><b id="player-hp-text">100/100</b></div>
+          <button class="skill-slot" id="combat-strike" title="Đánh thường"><i>1</i><strong>⚔</strong><small id="cooldown-strike"></small></button>
+          <button class="skill-slot" id="combat-cleave" title="Quét rộng"><i>2</i><strong>✹</strong><small id="cooldown-cleave"></small></button>
+          <button class="skill-slot" id="combat-volley" title="Loạt tên"><i>3</i><strong>➶</strong><small id="cooldown-volley"></small></button>
+          <button class="auto-combat" id="auto-combat" aria-pressed="false" title="Tự động đánh mục tiêu gần nhất">AUTO</button>
+          <button id="skill-collect" title="Gom vật liệu">Q</button><button id="skill-focus" title="Tập trung thu thập">R</button>
         </aside>
         <div class="dpad" aria-label="Điều khiển di chuyển">
           <button data-move="0,-1" aria-label="Đi về bắc">↑</button><button data-move="-1,0" aria-label="Đi về tây">←</button><button data-move="0,1" aria-label="Đi về nam">↓</button><button data-move="1,0" aria-label="Đi về đông">→</button>
@@ -49,7 +60,7 @@
         <p id="toast" role="status" aria-live="polite"></p>
       </section>
       <div class="left-rail">
-      <section class="mission panel">
+      <section class="mission panel hud-panel" id="quest-panel">
         <div class="panel-kicker"><span class="pixel-star" aria-hidden="true">✦</span><span class="eyebrow" id="chapter-label">CHƯƠNG 01</span><span class="chapter-tag">NHIỆM VỤ</span></div>
         <h1 id="quest-title">Một cây cầu.<br />Nhiều cuộc đời.</h1>
         <p id="quest-summary">
@@ -69,16 +80,16 @@
           <button id="sync-retry">Kết nối lại</button>
         </div>
       </section>
-      <section class="valley-pulse panel" aria-labelledby="pulse-title">
+      <section class="valley-pulse panel hud-panel" id="pulse-panel" aria-labelledby="pulse-title">
         <div class="pulse-heading"><h2 id="pulse-title">Nhịp sống hôm nay</h2><button id="valley-report-open" aria-label="Xem toàn cảnh đời sống thung lũng">↗</button></div>
         <div id="valley-report"><p class="valley-empty">Đang lắng nghe thung lũng…</p></div>
       </section>
-      <section class="chronicle panel">
+      <section class="chronicle panel hud-panel" id="chronicle-panel">
         <button id="chronicle-toggle" aria-expanded="true"><span class="eyebrow">BIÊN NIÊN SỬ</span><span id="event-count">0 sự kiện</span></button>
         <div id="events" aria-label="Lịch sử thế giới"></div>
       </section>
       </div>
-      <aside class="inspect panel open">
+      <aside class="inspect panel open hud-panel" id="place-panel">
         <button id="close-inspect" aria-label="Đóng bảng địa điểm">×</button>
         <div class="panel-heading">
           <span class="eyebrow">ĐỊA ĐIỂM</span><span id="coordinates">—</span>
@@ -205,6 +216,7 @@
           <button class="hud-action" id="inventory-open" aria-label="Mở ba lô" title="Ba lô" data-tooltip="Ba lô"><i class="hud-icon backpack" aria-hidden="true"></i><span>Ba lô</span></button>
           <button class="hud-action" id="achievements-open" aria-label="Mở thành tựu" title="Thành tựu" data-tooltip="Thành tựu"><i class="hud-icon trophy" aria-hidden="true"></i><span>Thành tựu</span></button>
           <button class="hud-action" id="character-open" aria-label="Mở nhân vật" title="Nhân vật" data-tooltip="Nhân vật"><i class="hud-icon character" aria-hidden="true"></i><span>Nhân vật</span></button>
+          <button class="hud-action talent-action" id="talents-open" aria-label="Mở thiên phú" title="Thiên phú" data-tooltip="Thiên phú"><b aria-hidden="true">✦</b><span>Thiên phú</span></button>
           <button class="hud-action" id="build-toggle" aria-label="Mở xây dựng" title="Xây dựng" data-tooltip="Xây dựng"><i class="hud-icon hammer" aria-hidden="true"></i><span>Xây dựng</span></button>
           <button class="hud-action" id="map-overview" aria-label="Xem toàn bản đồ" title="Bản đồ" data-tooltip="Bản đồ"><i class="hud-icon map" aria-hidden="true"></i><span>Bản đồ</span></button>
           <span>WASD di chuyển<br />E tương tác</span>
@@ -260,6 +272,14 @@
       <span class="eyebrow">HÀNH TRÌNH PHÁT TRIỂN</span>
       <h2 id="achievements-title">Thành tựu</h2>
       <div id="achievements-list" class="achievements-list"></div>
+    </dialog>
+    <dialog id="talents-dialog" aria-labelledby="talents-title">
+      <button class="dialog-close" id="talents-close" aria-label="Đóng thiên phú">×</button>
+      <span class="eyebrow">SỨC MẠNH NHÂN VẬT</span>
+      <h2 id="talents-title">Nhánh thiên phú</h2>
+      <p id="talent-points">0 điểm còn lại</p>
+      <div id="talent-tree" class="talent-tree"></div>
+      <section class="weapon-loadout"><span class="eyebrow">TRANG BỊ</span><h3>Vũ khí đang mang</h3><div id="weapon-list"></div></section>
     </dialog>
     <dialog id="character-dialog">
       <form id="character-form">

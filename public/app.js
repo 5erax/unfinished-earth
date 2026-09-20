@@ -22,6 +22,9 @@ import {
   CROPS,
   LIVESTOCK,
   ACHIEVEMENTS,
+  TALENTS,
+  COMBAT_SKILLS,
+  WILDLIFE,
   CLASSES,
   cartPosition, settlementSummary, DAY_MS,
   freeSegment, findRoute, MOVE_SPEED,
@@ -111,6 +114,7 @@ let state = null,
   toastTimer,
   polling = false,
   online = false;
+let autoCombat = false;
 let valleyUI, chronicleUI;
 function stopMovement() {
   held.clear();
@@ -315,6 +319,14 @@ $("inventory-open").onclick = () => { stopMovement(); $("inventory-dialog").show
 $("inventory-close").onclick = () => $("inventory-dialog").close();
 $("achievements-open").onclick = () => { stopMovement(); $("achievements-dialog").showModal(); };
 $("achievements-close").onclick = () => $("achievements-dialog").close();
+$("talents-open").onclick = () => { stopMovement(); $("talents-dialog").showModal(); };
+$("talents-close").onclick = () => $("talents-dialog").close();
+for (const button of document.querySelectorAll("[data-panel]")) button.onclick = () => {
+  const panel = $(button.dataset.panel);
+  const wasOpen = panel.classList.contains("panel-popover");
+  document.querySelectorAll(".hud-panel").forEach(item => item.classList.remove("panel-popover"));
+  if (!wasOpen) panel.classList.add("panel-popover");
+};
 $("chronicle-toggle").onclick = () => {
   const hidden = ($("events").hidden = !$("events").hidden);
   $("chronicle-toggle").setAttribute("aria-expanded", String(!hidden));
@@ -332,7 +344,7 @@ function select(id) {
     }
   }
   selected = id;
-  document.querySelector(".inspect").classList.add("open");
+  document.querySelector(".inspect").classList.add("open", "panel-popover");
   const select = $("places");
   if (![...select.options].some((o) => o.value === id)) {
     const o = document.createElement("option");
@@ -794,18 +806,51 @@ $("quest-go").onclick = () => {
   }
 };
 $("close-inspect").onclick = () =>
-  document.querySelector(".inspect").classList.remove("open");
+  document.querySelector(".inspect").classList.remove("open", "panel-popover");
 $("build-toggle").onclick = () => {
-  document.querySelector(".inspect").classList.add("open");
+  document.querySelector(".inspect").classList.add("open", "panel-popover");
   $("construction").open = true;
 };
 $("map-overview").onclick = () => { worldMap.resetView(); renderWorld(); };
+function nearestWildlife(skill = "strike") {
+  if (!state) return null;
+  const p = state.players[state.you], weapon = p.equipment?.weapon;
+  const range = weapon === "bow" ? 7 : (COMBAT_SKILLS[skill]?.range || 2.5);
+  return (state.wildlife || []).filter(animal => animal.hp > 0 && Math.hypot(animal.x-p.x, animal.z-p.z) <= range)
+    .sort((a,b) => Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0] || null;
+}
+async function useCombatSkill(skill) {
+  const animal = nearestWildlife(skill);
+  if (!animal) { toast("Không có động vật trong tầm kỹ năng."); return; }
+  $("world").classList.remove("skill-impact"); void $("world").offsetWidth; $("world").classList.add("skill-impact");
+  await command({type:"combat",skill,target:animal.id});
+}
+$("combat-strike").onclick = () => useCombatSkill("strike");
+$("combat-cleave").onclick = () => useCombatSkill("cleave");
+$("combat-volley").onclick = () => useCombatSkill("volley");
+$("auto-combat").onclick = () => {
+  autoCombat = !autoCombat;
+  $("auto-combat").setAttribute("aria-pressed", String(autoCombat));
+  toast(autoCombat ? "Đã bật tự động chiến đấu." : "Đã tắt tự động chiến đấu.");
+};
+setInterval(() => {
+  if (!state) return;
+  const p = state.players[state.you], now = Date.now();
+  for (const key of Object.keys(COMBAT_SKILLS)) {
+    const node = $(`cooldown-${key}`), left = Math.max(0,(p.combatCooldowns?.[key]||0)-now);
+    if (node) node.textContent = left ? `${(left/1000).toFixed(1)}` : "";
+  }
+  if (autoCombat && canAct()) {
+    const skill = ["volley","cleave","strike"].find(key => now >= (p.combatCooldowns?.[key]||0) && nearestWildlife(key));
+    if (skill) useCombatSkill(skill);
+  }
+}, 250);
 window.addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "e" && !inputBlocked()) {
     $("actions").querySelector("button:not(:disabled)")?.click();
   }
   if (e.key === "Escape") {
-    document.querySelector(".inspect").classList.remove("open");
+    document.querySelector(".inspect").classList.remove("open", "panel-popover");
     path = [];
     held.clear();
   }
@@ -867,6 +912,27 @@ function renderUI() {
     item.append(icon, text, count); return item;
   }));
   $("player-progression").textContent = `Cấp ${p.level || 1} · ${p.profession?.title || "Người khai phá"} · ${p.xp || 0} XP · Sức mạnh: khai thác +${p.powers?.gather || 0}, sản xuất +${p.powers?.production || 0}`;
+  $("talent-points").textContent = `${p.talentPoints || 0} điểm có thể phân bổ`;
+  $("talent-tree").replaceChildren(...Object.entries(TALENTS).map(([key, talent]) => {
+    const card = document.createElement("article"), rank = p.talents?.[key] || 0;
+    card.className = "talent-node"; card.dataset.branch = talent.branch;
+    const head = document.createElement("strong"); head.textContent = `${talent.name} · ${rank}/${talent.max}`;
+    const detail = document.createElement("span"); detail.textContent = `${talent.branch} · ${talent.detail}`;
+    const button = document.createElement("button"); button.textContent = rank >= talent.max ? "Tối đa" : "+";
+    button.disabled = !p.talentPoints || rank >= talent.max; button.onclick = () => command({type:"spend-talent",talent:key});
+    card.append(head, detail, button); return card;
+  }));
+  $("weapon-list").replaceChildren(...["sword","bow","spear"].map(weapon => {
+    const button = document.createElement("button"), owned = p.bag[weapon] || 0;
+    button.textContent = `${p.equipment?.weapon === weapon ? "◆" : "◇"} ${ITEMS[weapon]} · ${owned}`;
+    button.disabled = !owned; button.onclick = () => command({type:"equip-weapon",weapon}); return button;
+  }));
+  $("player-hp").max = p.maxHp || 100; $("player-hp").value = p.hp || 0;
+  $("player-hp-text").textContent = `${p.hp || 0}/${p.maxHp || 100}`;
+  for (const key of Object.keys(COMBAT_SKILLS)) {
+    const left = Math.max(0, (p.combatCooldowns?.[key] || 0) - Date.now());
+    const node = $(`cooldown-${key}`); if (node) node.textContent = left ? `${(left/1000).toFixed(1)}` : "";
+  }
   $("achievements-list").replaceChildren(...ACHIEVEMENTS.map(definition => {
     const unlocked = p.achievements?.includes(definition.id), card = document.createElement("article");
     card.className = `achievement-card${unlocked ? " unlocked" : ""}`;
@@ -942,6 +1008,9 @@ function renderUI() {
     action("Xẻ 3 ván · 2 gỗ", { type: "craft", target: building.id, recipe: "plank" }, p.bag.wood < 2);
       action("Nung 3 gạch · 3 đất sét + 1 gỗ", { type: "craft", target: building.id, recipe: "brick" }, p.bag.clay < 3 || p.bag.wood < 1);
       action("Nấu 4 khẩu phần · 2 lúa + 1 rau", { type: "craft", target: building.id, recipe: "ration" }, p.bag.grain < 2 || p.bag.vegetable < 1);
+      action("Rèn kiếm · 4 quặng + 2 gỗ + 1 da", { type: "craft", target: building.id, recipe: "sword" }, p.bag.ore < 4 || p.bag.wood < 2 || p.bag.leather < 1);
+      action("Làm cung · 3 gỗ + 3 sợi + 1 da", { type: "craft", target: building.id, recipe: "bow" }, p.bag.wood < 3 || p.bag.fiber < 3 || p.bag.leather < 1);
+      action("Rèn giáo · 3 gỗ + 2 quặng", { type: "craft", target: building.id, recipe: "spear" }, p.bag.wood < 3 || p.bag.ore < 2);
   }
   if (building?.owner === state.you)
     action("Tháo dỡ và thu hồi vật liệu", { type: "demolish", target: building.id });

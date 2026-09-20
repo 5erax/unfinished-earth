@@ -1590,7 +1590,69 @@ dialog .class-card small { font-size: 11px; line-height: 1.6; color: #c2c9b7; ma
 @media (max-width: 440px) {
   .controls { gap: 4px; }
   .controls .hud-action { flex-basis: 40px; width: 40px; min-width: 40px; height: 40px; padding: 4px; }
-  .hud-icon { width: 27px; height: 27px; }
+.hud-icon { width: 27px; height: 27px; }
+}
+
+/* Panels become opt-in overlays so the world stays visually dominant. */
+#game {
+  grid-template-columns: minmax(0,1fr);
+  grid-template-areas: "top" "map" "bottom";
+}
+.left-rail {
+  position: absolute;
+  z-index: 12;
+  top: 76px;
+  left: 12px;
+  bottom: 92px;
+  width: min(330px, calc(100vw - 24px));
+  pointer-events: none;
+}
+.left-rail .hud-panel { display: none; pointer-events: auto; max-height: 100%; overflow-y: auto; }
+.left-rail .hud-panel.panel-popover { display: block; }
+.left-rail .hud-panel.panel-popover ~ .hud-panel.panel-popover { display:none; }
+.inspect { display:none !important; position:absolute; z-index:12; top:76px; right:12px; bottom:92px; width:min(330px,calc(100vw - 24px)); }
+.inspect.panel-popover { display:block !important; }
+.panel-shortcuts {
+  position:absolute;
+  z-index:10;
+  top:48px;
+  right:14px;
+  display:grid;
+  gap:5px;
+  padding:5px;
+  background:#12212fe8;
+  border:1px solid #64736790;
+}
+.panel-shortcuts button {
+  width:35px;height:35px;min-height:0;padding:0;
+  color:#f0d691;font-size:18px;background:#263d42;
+}
+.talent-action > b { color:#edd17d; font-size:26px; line-height:1; }
+#talents-dialog { width:min(760px,calc(100% - 28px)); }
+.talent-tree { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:18px; }
+.talent-node { position:relative; display:grid; gap:5px; margin:0; padding:13px 52px 13px 13px; border:1px solid #4c6559; background:#142832; }
+.talent-node[data-branch="Chiến đấu"]{border-left:4px solid #aa624b}.talent-node[data-branch="Sinh tồn"]{border-left:4px solid #6f995d}.talent-node[data-branch="Sản xuất"]{border-left:4px solid #c69b52}
+.talent-node span { color:#aebdb2; font-size:11px; }
+.talent-node button { position:absolute; right:9px; top:9px; width:34px; height:34px; padding:0; }
+.weapon-loadout { margin-top:18px; padding-top:14px; border-top:1px solid var(--line); }
+#weapon-list { display:flex; gap:8px; flex-wrap:wrap; }
+.skill-bar { left:50%; translate:-50% 0; bottom:54px; max-width:calc(100% - 24px); }
+.combat-vitals { display:grid; grid-template-columns:auto minmax(80px,130px) auto; align-items:center; gap:6px; }
+.combat-vitals meter { margin:0; height:9px; }
+.combat-vitals b { font-size:9px;color:#f1d9aa; }
+.skill-slot { position:relative; width:40px; height:40px; padding:0; }
+.skill-slot i { position:absolute; left:3px; top:2px; font:7px var(--mono); color:#9fb2aa; }
+.skill-slot strong { font-size:19px; color:#edcf89; }
+.skill-slot small { position:absolute; inset:0; display:grid; place-items:center; color:white; background:#0c1722aa; font-weight:800; }
+.auto-combat[aria-pressed="true"] { color:#f4d58c; border-color:#d2aa65; background:#4a4933; }
+#world.skill-impact canvas { animation:skill-impact .18s steps(2); }
+@keyframes skill-impact { 50% { filter:brightness(1.45) saturate(1.4); transform:translateX(2px); } }
+.item-token.sword,.item-token.bow,.item-token.spear { background-position:60% 100%; }
+@media(max-width:700px){
+  .talent-tree{grid-template-columns:1fr}
+  .panel-shortcuts{top:92px;right:8px}
+  .skill-bar{bottom:92px;overflow-x:auto}
+  .combat-vitals{grid-template-columns:auto 80px auto}
 }
 .inventory-grid {
   display: grid;

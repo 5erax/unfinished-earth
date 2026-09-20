@@ -364,6 +364,12 @@ export class Map2D {
       actorPositions.set(id,{x:p.x,z:p.z,lastMoved});
       objects.push({kind:'person',x:p.x,z:p.z,color:CLASS_COLORS[p.classId]||'#c78a4c',you:id===state.you,role:p.classId||'builder',moving:lastMoved>=0&&this.animationTime-lastMoved<.18,player:true});
     }
+    const wildlifeNames={deer:'Hươu',boar:'Lợn rừng',wolf:'Sói',rabbit:'Thỏ',bear:'Gấu',fish:'Cá sông'};
+    for(const animal of state?.wildlife||[]){
+      if(animal.hp<=0)continue;
+      this.targets.push({id:animal.id,x:animal.x,z:animal.z,label:`${wildlifeNames[animal.type]||animal.type} · ${animal.hp} máu · ${animal.state}`});
+      objects.push({id:animal.id,kind:'wildlife',animalType:animal.type,x:animal.x,z:animal.z,hp:animal.hp});
+    }
     this.actorPositions=actorPositions;
     objects.sort((a,b)=>a.z-b.z);
     for(const o of objects){
@@ -393,6 +399,14 @@ export class Map2D {
         rect(c,x-4,y,11,3,'#456c4160');rect(c,x-3,y-1,2,4,'#766d50');rect(c,x+3,y-1,2,4,'#766d50');
         rect(c,x-5,y-6,10,6,'#d4d3b1');rect(c,x-3,y-8,6,7,'#eee8c8');rect(c,x+4,y-5,4,4,'#887f62');rect(c,x+7,y-5,1,1,'#414d3c');
       }
+      else if(o.kind==='wildlife'){
+        const aquatic=o.animalType==='fish', predator=['wolf','bear'].includes(o.animalType);
+        if(aquatic){rect(c,x-7,y-3,11,6,'#70b6b2');rect(c,x+4,y-1,5,2,'#9cd3c6');rect(c,x-4,y-1,1,1,'#172a31');}
+        else {const body=o.animalType==='rabbit'?'#d9cdb0':o.animalType==='deer'?'#b78455':o.animalType==='boar'?'#765443':predator?'#59605d':'#a98a63';
+          rect(c,x-7,y-7,13,8,body);rect(c,x+4,y-10,6,7,body);rect(c,x-5,y,2,5,'#403c34');rect(c,x+3,y,2,5,'#403c34');rect(c,x+7,y-8,1,1,'#f0d38b');
+          if(o.animalType==='deer'){rect(c,x+5,y-14,1,5,'#6b4b33');rect(c,x+9,y-14,1,5,'#6b4b33');}
+        }
+      }
     }
     if(state&&Number.isFinite(state.dayProgress)){
       const day=((state.dayProgress/DAY_MS)%1+1)%1,daylight=Math.max(0,Math.cos((day-.3)*Math.PI*2));
@@ -409,6 +423,11 @@ export class Map2D {
     }
     if(chosen)outline(chosen.x,chosen.z,'#ffe6a0');c.restore();
     display.save();display.translate(ox,oy);display.scale(scale,scale);display.drawImage(this.layer,-PAD,-PAD);display.restore();
+    if(state?.weather==='Mưa lớn'){
+      display.save();display.strokeStyle='#b7dfeb88';display.lineWidth=1;
+      for(let i=0;i<90;i++){const x=(i*83+time*220)%this.w,y=(i*47+time*390)%this.h;display.beginPath();display.moveTo(x,y);display.lineTo(x-5,y+13);display.stroke();}
+      display.fillStyle='#294e6170';display.fillRect(0,0,this.w,this.h);display.restore();
+    }
     if(this.showLabels){
       for(const id of ['west','east']){
         const p=LANDMARKS.find(t=>t[0]===id);if(selected===id)continue;
