@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="32" viewBox="0 0 192 32" shape-rendering="crispEdges">
+<defs><style>.o{stroke:#16262c;stroke-width:2;stroke-linejoin:round}.g{fill:#d9bd7c}.l{fill:#f1dfa9}.d{fill:#6a8b69}.b{fill:#527f8e}.r{fill:#a96048}</style></defs>
+<g><path class="d o" d="M4 15L16 5l12 10v12H4z"/><path class="l o" d="M9 16h14v11H9z"/><path class="r" d="M14 19h5v8h-5z"/></g>
+<g transform="translate(32)"><path class="d o" d="M10 9c0-5 12-5 12 0v3h3l3 15H4l3-15h3z"/><path class="g o" d="M11 9h10v5H11z"/><path class="l" d="M9 17h14v3H9z"/></g>
+<g transform="translate(64)"><path class="g o" d="M9 5h14v8c0 6-3 9-7 9s-7-3-7-9z"/><path class="g o" d="M9 8H4c0 6 3 9 8 9m11-9h5c0 6-3 9-8 9M16 22v4m-6 1h12"/><path class="l" d="M13 8h6v7h-6z"/></g>
+<g transform="translate(96)"><circle class="l o" cx="16" cy="9" r="6"/><path class="b o" d="M6 27c1-8 5-12 10-12s9 4 10 12z"/><path class="r" d="M12 18h8v4h-8z"/></g>
+<g transform="translate(128)"><path class="l o" d="M5 7h13v7H5z"/><path class="g o" d="M15 12l4-3 9 15-6 4z"/><path class="r" d="M8 9h8v3H8z"/></g>
+<g transform="translate(160)"><path class="l o" d="M4 6l8-2 8 3 8-2v21l-8 2-8-3-8 2z"/><path class="b" d="M12 6l8 3v16l-8-3z"/><path class="d" d="M6 10l5-2v13l-5 2zm15 0l5-2v14l-5 2z"/></g>
+</svg>

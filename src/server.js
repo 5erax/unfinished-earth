@@ -109,6 +109,7 @@ export function createGameServer({
     ["/app.js", ["public/app.js", "text/javascript"]],
     ["/style.css", ["public/style.css", "text/css"]],
     ["/item-icons.svg", ["public/item-icons.svg", "image/svg+xml"]],
+    ["/ui-icons.svg", ["public/ui-icons.svg", "image/svg+xml"]],
     [
       "/three.js",
       ["node_modules/three/build/three.module.js", "text/javascript"],
