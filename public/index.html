@@ -24,9 +24,9 @@
       </header>
       <section class="map-shell" aria-label="Thế giới đang sống">
         <div id="world" aria-label="Bản đồ pixel nhìn từ trên xuống. Kéo để khám phá, cuộn để thu phóng. Dùng WASD hoặc các phím mũi tên để di chuyển."></div>
-        <div class="map-caption"><span class="live-dot" aria-hidden="true"></span>THUNG LŨNG ĐẦU TIÊN <span class="map-caption-detail">/ THẾ GIỚI 64×64 · 64 NGUỒN TÀI NGUYÊN</span></div>
+        <div class="map-caption"><span class="live-dot" aria-hidden="true"></span>THẾ GIỚI ĐANG SỐNG <span class="map-caption-detail">/ 96×96 · 7 QUẦN XÃ SINH THÁI</span></div>
         <nav class="region-nav" aria-label="Các vùng trên bản đồ">
-          <button data-region="home">Thung lũng</button><button data-region="mistwood">Rừng Sương</button><button data-region="highland">Cao nguyên</button><button data-region="farreach">Biên Viễn</button>
+          <button data-region="home">Thung lũng</button><button data-region="mistwood">Rừng Sương</button><button data-region="highland">Cao nguyên</button><button data-region="farreach">Biên Viễn</button><button data-region="marsh">Đầm Sương</button><button data-region="ashlands">Đất Tro</button><button data-region="frostlands">Băng Nguyên</button>
         </nav>
         <div class="camera-tools" role="toolbar" aria-label="Điều khiển bản đồ">
           <button id="zoom-out" title="Thu nhỏ" aria-label="Thu nhỏ bản đồ">−</button>
@@ -99,6 +99,9 @@
           <option value="mistwood">Rừng Sương</option>
           <option value="highland">Cao nguyên Đỏ</option>
           <option value="farreach">Biên Viễn</option>
+          <option value="marsh">Đầm Sương</option>
+          <option value="ashlands">Đất Tro</option>
+          <option value="frostlands">Băng Nguyên</option>
         </select>
         <h2 id="selection-title">Nơi trú ẩn</h2>
         <p id="selection-description">
@@ -106,6 +109,11 @@
         </p>
         <button class="secondary" id="travel">Đi đến địa điểm</button>
         <div id="actions"></div>
+        <div id="production-panel" hidden>
+          <label for="production-type">Giống đang sản xuất</label>
+          <select id="production-type"></select>
+          <button id="production-apply">Đổi giống sản xuất</button>
+        </div>
         <section id="valley-details" hidden aria-label="Tình hình địa điểm"></section>
         <div id="storage-panel" hidden>
           <p id="storage-stock"></p>
@@ -116,6 +124,12 @@
             <option value="food">Thức ăn</option>
             <option value="fiber">Sợi cỏ</option>
             <option value="clay">Đất sét</option>
+            <option value="seed">Hạt giống</option><option value="grain">Ngũ cốc</option>
+            <option value="vegetable">Rau củ</option><option value="fruit">Trái cây</option>
+            <option value="herb">Thảo dược</option><option value="wool">Len</option>
+            <option value="milk">Sữa</option><option value="egg">Trứng</option>
+            <option value="leather">Da thuộc</option><option value="ore">Quặng</option>
+            <option value="tool">Công cụ</option><option value="plank">Ván gỗ</option><option value="brick">Gạch nung</option>
           </select>
           <label for="storage-amount">Số lượng</label
           ><input
@@ -139,6 +153,11 @@
             <option value="house">Nhà nhỏ · 6 gỗ + 2 đá</option>
             <option value="field">Ruộng canh tác · 4 gỗ + 1 đá + 2 sợi</option>
             <option value="pasture">Chuồng nuôi · 6 gỗ + 2 đá + 4 sợi</option>
+            <option value="lumberyard">Trại lâm nghiệp · 8 gỗ + 2 đá + 1 công cụ</option>
+            <option value="quarry">Mỏ khai thác · 6 gỗ + 5 đá + 1 công cụ</option>
+            <option value="workshop">Xưởng công cụ · 10 gỗ + 6 đá + 4 đất sét</option>
+            <option value="canal">Kênh nước · 2 đá + 4 đất sét</option>
+            <option value="marketstall">Quầy giao thương · 8 gỗ + 4 sợi + 2 đất sét</option>
           </select>
           <p id="build-benefit">Cất tối đa 80 đơn vị. Chỉ bạn được lấy hàng.</p>
           <p>Chọn ô trên bản đồ hoặc nhập tọa độ ô:</p>
@@ -148,7 +167,7 @@
                 id="build-x"
                 type="number"
                 min="2"
-                max="61"
+                max="93"
                 step="1"
                 value="10" /></label
             ><label
@@ -156,7 +175,7 @@
                 id="build-z"
                 type="number"
                 min="2"
-                max="61"
+                max="93"
                 step="1"
                 value="22"
             /></label>
@@ -179,16 +198,12 @@
       <footer class="toolbar panel">
         <div class="bag">
           <span class="eyebrow">TRONG TÚI <b id="bag-capacity">0/64</b></span>
-          <div>
-            <span><i class="resource-icon wood-icon" aria-hidden="true"></i>Gỗ <b id="wood">0</b></span
-            ><span><i class="resource-icon stone-icon" aria-hidden="true"></i>Đá <b id="stone">0</b></span
-            ><span><i class="resource-icon food-icon" aria-hidden="true"></i>Thức ăn <b id="food">0</b></span>
-            <span><i class="resource-icon fiber-icon" aria-hidden="true"></i>Sợi <b id="fiber">0</b></span
-            ><span><i class="resource-icon clay-icon" aria-hidden="true"></i>Đất sét <b id="clay">0</b></span>
-          </div>
+          <div id="bag-items"></div>
         </div>
         <div class="controls">
           <button id="valley-open" aria-haspopup="dialog" aria-controls="valley-dialog">Thung lũng</button>
+          <button id="inventory-open">Kho đồ</button>
+          <button id="achievements-open">Thành tựu</button>
           <button id="character-open">Nhân vật</button>
           <button id="build-toggle">Xây dựng</button>
           <button id="map-overview">Toàn cảnh</button>
@@ -232,6 +247,19 @@
         </div>
       </section>
       <footer class="valley-footer">Thời gian và dự trữ là số liệu trong game. Người dân ăn, làm việc và cân nhắc nơi ở theo điều kiện của làng.</footer>
+    </dialog>
+    <dialog id="inventory-dialog" aria-labelledby="inventory-title">
+      <button class="dialog-close" id="inventory-close" aria-label="Đóng kho đồ">×</button>
+      <span class="eyebrow">TÀI SẢN CỦA NGƯỜI CHƠI</span>
+      <h2 id="inventory-title">Kho đồ &amp; sức mạnh</h2>
+      <p id="player-progression"></p>
+      <div id="inventory-grid" class="inventory-grid"></div>
+    </dialog>
+    <dialog id="achievements-dialog" aria-labelledby="achievements-title">
+      <button class="dialog-close" id="achievements-close" aria-label="Đóng thành tựu">×</button>
+      <span class="eyebrow">HÀNH TRÌNH PHÁT TRIỂN</span>
+      <h2 id="achievements-title">Thành tựu</h2>
+      <div id="achievements-list" class="achievements-list"></div>
     </dialog>
     <dialog id="character-dialog">
       <form id="character-form">

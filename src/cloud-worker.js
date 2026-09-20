@@ -34,6 +34,13 @@ export function view(w, id, now, speed) {
                     focusUntil: p.focusUntil || 0,
                 discoveries: p.discoveries,
                 trades: p.trades || 0,
+                xp: p.xp || 0,
+                level: p.level || 1,
+                profession: p.profession,
+                achievements: p.achievements || [],
+                stats: p.stats || {},
+                unspentPower: p.unspentPower || 0,
+                powers: p.powers || {},
                 moveSeq: p.moveSeq || 0,
               }
             : {}),

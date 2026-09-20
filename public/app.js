@@ -19,6 +19,9 @@ import {
   BUILDINGS,
   BAG_CAPACITY,
   ITEMS,
+  CROPS,
+  LIVESTOCK,
+  ACHIEVEMENTS,
   CLASSES,
   cartPosition, settlementSummary, DAY_MS,
   freeSegment, findRoute, MOVE_SPEED,
@@ -43,6 +46,9 @@ const P = {
   mistwood: { x: 8, z: 40 },
   highland: { x: 40, z: 32 },
   farreach: { x: 54, z: 48 },
+  marsh: { x: 74, z: 18 },
+  ashlands: { x: 82, z: 50 },
+  frostlands: { x: 76, z: 80 },
 };
 const copy = {
   home: [
@@ -93,6 +99,9 @@ const copy = {
     "Biên Viễn",
     "Vùng đất xa nhất của bản đồ 64×64. Tài nguyên thưa nhưng trữ lượng lớn, thích hợp mở khu sản xuất quy mô rộng.",
   ],
+  marsh: ["Đầm Sương", "Vùng đất ngập theo mùa, giàu thảo dược và đất sét. Kênh nước đặt gần ruộng sẽ điều chỉnh độ ẩm cục bộ."],
+  ashlands: ["Đất Tro", "Địa hình núi lửa cũ chứa quặng. Cháy rừng và tro bụi có thể làm vùng này thay đổi bất ngờ."],
+  frostlands: ["Băng Nguyên", "Vùng lạnh xa nhất, tài nguyên phục hồi chậm nhưng có trữ lượng khoáng sản lớn."],
 };
 let state = null,
   selected = "home",
@@ -302,6 +311,10 @@ $("join-form").addEventListener("submit", async (e) => {
 $("welcome").addEventListener("cancel", (e) => e.preventDefault());
 $("help").onclick = () => { stopMovement(); $("help-dialog").showModal(); };
 $("close-help").onclick = () => $("help-dialog").close();
+$("inventory-open").onclick = () => { stopMovement(); $("inventory-dialog").showModal(); };
+$("inventory-close").onclick = () => $("inventory-dialog").close();
+$("achievements-open").onclick = () => { stopMovement(); $("achievements-dialog").showModal(); };
+$("achievements-close").onclick = () => $("achievements-dialog").close();
 $("chronicle-toggle").onclick = () => {
   const hidden = ($("events").hidden = !$("events").hidden);
   $("chronicle-toggle").setAttribute("aria-expanded", String(!hidden));
@@ -326,7 +339,7 @@ function select(id) {
     o.value = id;
     o.textContent = state?.npcs?.find(n => n.id === id)?.name || (state?.buildings?.find((b) => b.id === id)
       ? BUILDINGS[state.buildings.find((b) => b.id === id).kind].name
-      : ({ wood: "Rừng cây", stone: "Mỏ đá", fiber: "Bãi sợi cỏ", clay: "Bãi đất sét" }[state?.resources.find((r) => r.id === id)?.type] || "Tài nguyên"));
+      : ({ wood: "Rừng cây", stone: "Mỏ đá", fiber: "Bãi sợi cỏ", clay: "Bãi đất sét", herb: "Thảm thảo dược", ore: "Mạch quặng" }[state?.resources.find((r) => r.id === id)?.type] || "Tài nguyên"));
     select.append(o);
   }
   select.value = id;
@@ -525,12 +538,14 @@ function renderConstruction() {
   const problem = placementProblem(state, state.you, kind, t.x, t.z);
   const costs = Object.entries(definition).filter(([key, amount]) => Object.hasOwn(ITEMS, key) && amount > 0);
   const afford = costs.every(([key, amount]) => (p.bag[key] || 0) >= amount);
-  $("build-benefit").textContent =
-    kind === "house"
-      ? "Thêm 2 chỗ ở cho làng trong bán kính 6 ô. Dân chỉ chuyển đến khi có thức ăn và đường đi."
-      : kind === "storehouse" ? "Cất tối đa 80 đơn vị. Chỉ chủ kho được cất và lấy hàng."
-      : kind === "field" ? "Ruộng lớn lên theo độ ẩm. NPC trồng trọt được phân công tới đây sẽ tăng sản lượng."
-      : "Đàn vật nuôi sinh sản khi đồng cỏ khỏe. Người chăm nuôi giúp tạo thức ăn đều đặn.";
+  const benefits = {
+    house: "Thêm 2 chỗ ở cho làng trong bán kính 6 ô.", storehouse: "Cất tối đa 80 đơn vị. Chỉ chủ kho được lấy hàng.",
+    field: "Chọn một trong nhiều giống cây. Kênh nước và nông dân làm tăng sản lượng.", pasture: "Nuôi gà, bò, cừu hoặc dê tùy hệ sinh thái.",
+    lumberyard: "Tự động tạo gỗ khi rừng còn khỏe.", quarry: "Khai thác đá và có cơ hội nhận quặng.",
+    workshop: "Chế tạo công cụ, ván gỗ và gạch nung.", canal: "Tăng độ ẩm cho ruộng trong bán kính 6 ô.",
+    marketstall: "Tạo hàng hóa trao đổi và thu hút NPC buôn bán.",
+  };
+  $("build-benefit").textContent = benefits[kind];
   $("build-feedback").textContent =
     problem ||
     (!afford
@@ -572,6 +587,7 @@ for (const [id, direction] of [
       amount: Number($("storage-amount").value),
       direction,
     });
+$("production-apply").onclick = () => command({ type: "configure-production", target: selected, product: $("production-type").value });
 let questTarget = "home-wood", questBuildKind = null;
 function updateQuest() {
   const p = state.players[state.you];
@@ -703,7 +719,7 @@ function updateQuest() {
     questTarget = "highland";
   } else if (!foundFarreach) {
     title = "Chạm tới Biên Viễn";
-    hint = "Theo đường cao nguyên về phía đông nam để mở vùng đất xa nhất của thế giới 64×64.";
+    hint = "Theo đường cao nguyên về phía đông nam để mở vùng đất xa nhất của lục địa.";
     questTarget = "farreach";
   } else if (!hasField) {
     title = "Mở rộng mùa vụ";
@@ -835,9 +851,29 @@ function renderUI() {
     `Ngày ${state.day} · ${String(Math.floor(state.dayProgress / DAY_MS * 24)).padStart(2, "0")}:00 · ${state.weather}`;
   $("connection").textContent = `${state.online} người kết nối`;
   $("coordinates").textContent = `${Math.round(p.x * 16)} / ${Math.round(p.z * 16)} m`;
-  for (const kind of Object.keys(ITEMS))
-    $(kind).textContent = p.bag[kind] || 0;
-  $("bag-capacity").textContent = `${Object.values(p.bag).reduce((sum, amount) => sum + amount, 0)}/${BAG_CAPACITY}`;
+  const bagTotal = Object.values(p.bag).reduce((sum, amount) => sum + amount, 0);
+  $("bag-capacity").textContent = `${bagTotal}/${BAG_CAPACITY}`;
+  const visibleItems = Object.keys(ITEMS).filter(key => p.bag[key] > 0 || ["wood", "stone", "food", "tool"].includes(key)).slice(0, 5);
+  $("bag-items").replaceChildren(...visibleItems.map(key => {
+    const item = document.createElement("span"); item.className = "bag-item";
+      const icon = document.createElement("i"); icon.className = `item-token ${key}`; icon.setAttribute("aria-hidden", "true");
+    const label = document.createTextNode(ITEMS[key] + " "); const count = document.createElement("b"); count.textContent = p.bag[key] || 0;
+    item.append(icon, label, count); return item;
+  }));
+  $("inventory-grid").replaceChildren(...Object.keys(ITEMS).map(key => {
+    const item = document.createElement("div"); item.className = `inventory-item${p.bag[key] ? " owned" : ""}`;
+      const icon = document.createElement("i"); icon.className = `item-token ${key}`; icon.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span"); text.textContent = ITEMS[key]; const count = document.createElement("strong"); count.textContent = p.bag[key] || 0;
+    item.append(icon, text, count); return item;
+  }));
+  $("player-progression").textContent = `Cấp ${p.level || 1} · ${p.profession?.title || "Người khai phá"} · ${p.xp || 0} XP · Sức mạnh: khai thác +${p.powers?.gather || 0}, sản xuất +${p.powers?.production || 0}`;
+  $("achievements-list").replaceChildren(...ACHIEVEMENTS.map(definition => {
+    const unlocked = p.achievements?.includes(definition.id), card = document.createElement("article");
+    card.className = `achievement-card${unlocked ? " unlocked" : ""}`;
+    const title = document.createElement("strong"); title.textContent = `${unlocked ? "✓" : "◇"} ${definition.name}`;
+    const detail = document.createElement("span"); detail.textContent = `${definition.detail} · ${Math.min(p.stats?.[definition.stat] || 0, definition.value)}/${definition.value}`;
+    card.append(title, detail); return card;
+  }));
   $("save").textContent = !online ? "Đang chờ kết nối" : busy || recovering || hasPending() ? "Đang lưu thay đổi…" : "Tiến độ đã được lưu";
   $("credit").textContent =
     `Tín dụng offline: ${Math.floor(state.creditMs / 60000)} / 480 phút`;
@@ -862,14 +898,21 @@ function renderUI() {
   const building = state.buildings?.find((b) => b.id === selected);
   const npc = state.npcs.find(n => n.id === selected);
   const village = npc && state.villages.find(v => v.id === npc.village);
+  const stocked = building ? Object.entries(building.stock || {}).filter(([, amount]) => amount > 0).map(([key, amount]) => `${amount} ${ITEMS[key]}`).join(" · ") : "";
+  const buildingDescription = building && (building.kind === "house" ? `Thêm 2 chỗ ở cho ${state.villages.find(v => v.id === building.village).name}.`
+    : building.kind === "storehouse" ? `${building.owner === state.you ? "Kho của bạn" : "Kho của người khác"} · sức chứa 80 đơn vị.`
+    : building.kind === "field" ? `Đang trồng ${CROPS[building.cropType]?.name || "Lúa"} · vụ mới ${Math.round((building.progress || 0) * 100)}% · độ ẩm tại ruộng ${Math.round((building.localMoisture ?? state.moisture) * 100)}%.`
+    : building.kind === "pasture" ? `Đang nuôi ${LIVESTOCK[building.animalType]?.name || "Gà"} · đàn ${building.animals || 0} con.`
+    : building.kind === "canal" ? "Kênh tăng độ ẩm cho mọi ruộng trong bán kính 6 ô. Có thể tháo dỡ để đổi dòng nước."
+    : `${BUILDINGS[building.kind].name} đang vận hành theo tài nguyên và nhân công quanh làng.`);
   const [title, description] = (npc ? [npc.name,
-    `${village.name} · ${npc.job}. ${npc.activity || "Đang cùng dân làng duy trì sinh kế."} ${npc.hungryDays ? `Đã thiếu ăn ${npc.hungryDays} ngày.` : "Đã có khẩu phần trong ngày gần nhất."} ${npc.lastDecisionReason || ""}`] : building
+    `${village.name} · ${npc.job} · ${npc.mood || "Bình tâm"}. ${npc.activity || "Đang cùng dân làng duy trì sinh kế."} Mục tiêu: ${npc.goal || "giúp làng phát triển"}. Suy nghĩ: “${npc.thought || npc.lastDecisionReason || "Hôm nay sẽ là một ngày dài."}”`] : building
     ? [
         BUILDINGS[building.kind].name,
-        `Ô ${building.x}, ${building.z}. ${building.kind === "house" ? "Thêm 2 chỗ ở cho " + state.villages.find((v) => v.id === building.village).name : building.kind === "storehouse" ? building.owner === state.you ? "Kho của bạn · sức chứa 80 đơn vị." : "Kho thuộc người chơi khác." : building.kind === "field" ? `Tiến độ vụ mới ${Math.round((building.progress || 0) * 100)}% · đang có ${building.stock.food} thức ăn chờ thu.` : `Đàn ${building.animals || 0} con · đang có ${building.stock.food} thức ăn chờ thu.`}`,
+        `Ô ${building.x}, ${building.z}. ${buildingDescription}${stocked ? ` Kho sản phẩm: ${stocked}.` : ""}`,
       ]
     : copy[selected]) || [
-    ({ wood: "Rừng cây", stone: "Mỏ đá", fiber: "Bãi sợi cỏ", clay: "Bãi đất sét" }[r?.type] || "Nguồn tài nguyên"),
+    ({ wood: "Rừng cây", stone: "Mỏ đá", fiber: "Bãi sợi cỏ", clay: "Bãi đất sét", herb: "Thảm thảo dược", ore: "Mạch quặng" }[r?.type] || "Nguồn tài nguyên"),
     `Còn ${r?.remaining ?? 0}/${r?.capacity ?? 0} đơn vị. ${r?.remaining ? "Nguồn phục hồi theo thời tiết và sức khỏe môi trường." : `Đang tái tạo tự nhiên ${Math.round((r?.regrowth || 0) * 100)}%.`} Túi tối đa ${BAG_CAPACITY}.`,
   ];
   $("selection-title").textContent = title;
@@ -887,12 +930,21 @@ function renderUI() {
       { type: "gather", target: r.id },
       r.remaining === 0,
     );
-  if (building && ["field", "pasture"].includes(building.kind))
+  const buildingStock = building ? Object.values(building.stock || {}).reduce((sum, amount) => sum + amount, 0) : 0;
+  if (building && !["house", "storehouse", "canal"].includes(building.kind))
     action(
-      `Thu sản phẩm · ${building.stock.food} thức ăn`,
+      `Thu sản phẩm · ${buildingStock} vật phẩm`,
       { type: "collect-building", target: building.id },
-      building.stock.food <= 0,
+      buildingStock <= 0,
     );
+  if (building?.kind === "workshop") {
+    action("Chế tạo công cụ · 2 gỗ + 2 quặng", { type: "craft", target: building.id, recipe: "tool" }, p.bag.wood < 2 || p.bag.ore < 2);
+    action("Xẻ 3 ván · 2 gỗ", { type: "craft", target: building.id, recipe: "plank" }, p.bag.wood < 2);
+      action("Nung 3 gạch · 3 đất sét + 1 gỗ", { type: "craft", target: building.id, recipe: "brick" }, p.bag.clay < 3 || p.bag.wood < 1);
+      action("Nấu 4 khẩu phần · 2 lúa + 1 rau", { type: "craft", target: building.id, recipe: "ration" }, p.bag.grain < 2 || p.bag.vegetable < 1);
+  }
+  if (building?.owner === state.you)
+    action("Tháo dỡ và thu hồi vật liệu", { type: "demolish", target: building.id });
   if (selected === "bridge")
     action(
       state.bridge ? "Cầu đã thông" : "Sửa cầu · 8 gỗ + 4 đá",
@@ -928,6 +980,17 @@ function renderUI() {
     action("Đổi 3 đất sét → 2 đá", { type: "trade", recipe: "clay_stone" }, p.bag.clay < 3);
     action("Đổi 2 thức ăn → 3 sợi cỏ", { type: "trade", recipe: "food_fiber" }, p.bag.food < 2);
     action("Đổi 2 gỗ → 2 đất sét", { type: "trade", recipe: "wood_clay" }, p.bag.wood < 2);
+    action("Đổi 3 ngũ cốc → 2 hạt giống", { type: "trade", recipe: "grain_seed" }, p.bag.grain < 3);
+    action("Đổi 2 len → 2 quặng", { type: "trade", recipe: "wool_ore" }, p.bag.wool < 2);
+    action("Đổi 4 thảo dược → 1 công cụ", { type: "trade", recipe: "herb_tool" }, p.bag.herb < 4);
+  }
+  if (npc) {
+    const deal = npc.job === "Đánh cá" ? ["fiber", 2, "food", 3]
+      : npc.job === "Chăn nuôi" ? ["grain", 2, "wool", 2]
+      : npc.job === "Thợ thủ công" ? ["ore", 2, "tool", 1]
+      : npc.job === "Buôn bán" ? ["clay", 2, "herb", 3]
+      : ["wood", 2, "seed", 3];
+    action(`Đổi ${deal[1]} ${ITEMS[deal[0]]} → ${deal[3]} ${ITEMS[deal[2]]}`, { type: "npc-trade", target: npc.id }, (p.bag[deal[0]] || 0) < deal[1]);
   }
   if (npc && p.bag.food)
     action(`Góp ${p.bag.food} khẩu phần cho ${village.name}`, {type:"donate",target:village.id});
@@ -951,7 +1014,7 @@ function renderUI() {
       { type: "explore" },
       p.discoveries.includes("ruin"),
     );
-  if (["mistwood", "highland", "farreach"].includes(selected))
+  if (["mistwood", "highland", "farreach", "marsh", "ashlands", "frostlands"].includes(selected))
     action(
       p.discoveries.includes(selected) ? "Vùng đã được khảo sát" : "Khảo sát và mở bản đồ vùng",
       { type: "survey-region", target: selected },
@@ -963,6 +1026,17 @@ function renderUI() {
   if (building?.kind === "storehouse")
     $("storage-stock").textContent =
       `Trong kho: ${Object.keys(ITEMS).map(key => `${building.stock[key] || 0} ${ITEMS[key]}`).join(" · ")}`;
+  const configurable = building?.owner === state.you && ["field", "pasture"].includes(building.kind);
+  $("production-panel").hidden = !configurable;
+  if (configurable) {
+    const definitions = building.kind === "field" ? CROPS : LIVESTOCK;
+    const value = building.kind === "field" ? building.cropType : building.animalType;
+    $("production-type").replaceChildren(...Object.entries(definitions).map(([key, definition]) => {
+      const option = document.createElement("option"); option.value = key; option.textContent = definition.name; return option;
+    }));
+    $("production-type").value = value;
+    $("production-apply").textContent = building.kind === "field" ? "Đổi vụ · cần 1 hạt giống" : "Đổi đàn · cần 2 khẩu phần";
+  }
   for (const b of state.buildings || [])
     if (![...$("places").options].some((o) => o.value === b.id)) {
       const o = document.createElement("option");

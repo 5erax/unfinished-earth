@@ -1,4 +1,4 @@
-export const SIZE = 64;
+export const SIZE = 96;
 export const BAG_CAPACITY = 64;
 export const VERSION = 1;
 export const DAY_MS = 1_800_000;
@@ -17,15 +17,38 @@ export const POINTS = {
   mistwood: { x: 8, z: 40 },
   highland: { x: 40, z: 32 },
   farreach: { x: 54, z: 48 },
+  marsh: { x: 74, z: 18 },
+  ashlands: { x: 82, z: 50 },
+  frostlands: { x: 76, z: 80 },
 };
 export const BUILDINGS = {
   house: { name: "Nhà nhỏ", wood: 6, stone: 2, beds: 2 },
   storehouse: { name: "Kho cá nhân", wood: 4, stone: 2, capacity: 80 },
   field: { name: "Ruộng canh tác", wood: 4, stone: 1, fiber: 2, output: "food" },
   pasture: { name: "Chuồng chăn nuôi", wood: 6, stone: 2, fiber: 4, output: "food" },
+  lumberyard: { name: "Trại lâm nghiệp", wood: 8, stone: 2, tool: 1, output: "wood" },
+  quarry: { name: "Mỏ khai thác", wood: 6, stone: 5, tool: 1, output: "stone" },
+  workshop: { name: "Xưởng công cụ", wood: 10, stone: 6, clay: 4, output: "tool" },
+  canal: { name: "Kênh dẫn nước", stone: 2, clay: 4, output: "water" },
+  marketstall: { name: "Quầy giao thương", wood: 8, fiber: 4, clay: 2, output: "trade" },
 };
 export const ITEMS = {
-  wood: "gỗ", stone: "đá", food: "thức ăn", fiber: "sợi cỏ", clay: "đất sét",
+  wood: "gỗ", stone: "đá", food: "khẩu phần", fiber: "sợi cỏ", clay: "đất sét",
+  seed: "hạt giống", grain: "ngũ cốc", vegetable: "rau củ", fruit: "trái cây",
+  herb: "thảo dược", wool: "len", milk: "sữa", egg: "trứng", leather: "da thuộc",
+  ore: "quặng", tool: "công cụ", plank: "ván gỗ", brick: "gạch nung",
+};
+export const CROPS = {
+  grain: { name: "Lúa", item: "grain", moisture: .48, days: 3, yield: 7 },
+  vegetable: { name: "Rau củ", item: "vegetable", moisture: .62, days: 4, yield: 6 },
+  herb: { name: "Thảo dược", item: "herb", moisture: .38, days: 5, yield: 4 },
+  fruit: { name: "Cây ăn trái", item: "fruit", moisture: .56, days: 7, yield: 8 },
+};
+export const LIVESTOCK = {
+  chicken: { name: "Gà", item: "egg", grass: .15, days: 1, yield: 3 },
+  cow: { name: "Bò", item: "milk", grass: .7, days: 2, yield: 3 },
+  sheep: { name: "Cừu", item: "wool", grass: .48, days: 3, yield: 3 },
+  goat: { name: "Dê", item: "milk", grass: .35, days: 2, yield: 2 },
 };
 export function housingCapacity(w, village) {
   return (
@@ -238,6 +261,12 @@ export function ensureWorld(w) {
     p.bag ??= {};
     for (const item of Object.keys(ITEMS)) p.bag[item] ??= 0;
     p.trades ??= 0;
+    p.xp ??= 0;
+    p.level ??= 1;
+    p.achievements ??= [];
+    p.stats ??= { gathered: 0, built: 0, harvested: 0, traded: 0, explored: 0 };
+    p.profession ??= { tier: 1, title: CLASSES[p.classId]?.name || "Người khai phá" };
+    p.powers = { gather: Math.floor((p.level || 1) / 5), production: Math.floor((p.level || 1) / 7), trade: Math.floor((p.level || 1) / 10) };
   }
   for (const n of w.npcs || []) if (!Number.isFinite(n.workX) || !Number.isFinite(n.workZ)) {
     if (n.job === "Đánh cá") {
@@ -249,6 +278,15 @@ export function ensureWorld(w) {
       n.activity = "Chăm ruộng và thu hoạch";
     }
   }
+  for (const n of w.npcs || []) {
+    const seed = Number(n.id.split("-").at(-1)) || 1;
+    n.traits ??= ["Chăm chỉ", "Tò mò", "Thận trọng", "Hào phóng", "Độc lập"].filter((_, i) => (seed + i * 3) % 4 === 0).slice(0, 2);
+    n.needs ??= { hunger: n.hungryDays ? 35 : 78, energy: 70, social: 60, safety: 72, purpose: 65 };
+    n.mood ??= "Bình tâm";
+    n.thought ??= n.lastDecisionReason || "Hôm nay cần làm điều có ích cho làng.";
+    n.goal ??= n.job === "Đánh cá" ? "Giữ nguồn cá ổn định" : "Tăng dự trữ lương thực";
+    n.skill ??= 1 + (seed % 4);
+  }
   for (const r of w.resources) {
     r.capacity ??= Math.max(r.remaining || 0, r.type === "wood" ? 8 : 6);
     r.regrowth ??= 0;
@@ -258,30 +296,35 @@ export function ensureWorld(w) {
     b.stock ??= {};
     for (const item of Object.keys(ITEMS)) b.stock[item] ??= 0;
     b.progress ??= 0;
-    if (b.kind === "pasture") b.animals ??= 2;
+    if (b.kind === "field") b.cropType ??= "grain";
+    if (b.kind === "pasture") { b.animals ??= 2; b.animalType ??= "chicken"; }
   }
   const ids = new Set(w.resources.map(r => r.id));
   for (const [id, type, x, z, capacity] of expansionResources) if (!ids.has(id)) {
     w.resources.push({ id, type, x, z, remaining: capacity, capacity, regrowth: 0,
       fertility: 0.78 + ((x * 7 + z * 3) % 8) * 0.04 });
   }
-  for (let i = 0; w.resources.length < 64 && i < 256; i++) {
+  for (let i = 0; w.resources.length < 144 && i < 1024; i++) {
     const x = 3 + ((i * 17 + 9) % (SIZE - 7));
     const z = 3 + ((i * 29 + 13) % (SIZE - 7));
     if ((x >= 14 && x <= 18) || reservedTile(x, z) || w.resources.some(r => Math.hypot(r.x - x, r.z - z) < 1.5)) continue;
-    const type = ["wood", "fiber", "stone", "wood", "clay", "fiber"][i % 6];
-    const capacity = type === "wood" ? 12 : type === "fiber" ? 14 : 10;
+    const type = ["wood", "fiber", "stone", "wood", "clay", "herb", "ore", "fiber"][i % 8];
+    const capacity = type === "wood" ? 12 : type === "fiber" || type === "herb" ? 14 : 10;
     w.resources.push({ id: `frontier-resource-${i}`, type, x, z, remaining: capacity, capacity, regrowth: 0,
       fertility: 0.76 + ((x * 5 + z * 7) % 9) * 0.035 });
   }
-  w.expansionVersion = 1;
+  w.marketStock ??= Object.fromEntries(Object.keys(ITEMS).map(key => [key, key === "food" ? 24 : 8]));
+  w.developments ??= [];
+  w.worldEra ??= Math.max(1, Math.floor((w.day || 1) / 360) + 1);
+  w.biodiversity ??= { crops: ["grain"], livestock: ["chicken"], mutations: 0 };
+  w.expansionVersion = 2;
   return w;
 }
 // Continuous navigation uses expanded obstacle rectangles (actor radius 0.22).
 export const MOVE_SPEED = 5;
 export function obstacles(w) {
   const river = w.bridge ? [[14.28,0,17.72,16.72],[14.28,17.28,17.72,SIZE]] : [[14.28,0,17.72,SIZE]];
-  return [...river, ...(w.buildings || []).map(b => [b.x-.72,b.z-.72,b.x+.72,b.z+.72])];
+  return [...river, ...(w.buildings || []).filter(b => !["field", "pasture", "canal"].includes(b.kind)).map(b => [b.x-.72,b.z-.72,b.x+.72,b.z+.72])];
 }
 function pointFree(rects, x, z) {
   return Number.isFinite(x) && Number.isFinite(z) && x >= 1 && z >= 1 && x <= SIZE - 2 && z <= SIZE - 2 &&
@@ -373,6 +416,43 @@ export const CLASSES = {
   connector: { name: "Người kết nối", role: "Cộng đồng · trao đổi", color: "#6984b2", art: 3,
     description: "Lắng nghe từng câu chuyện và kéo mọi người lại gần.", passive: "Bộ kỹ năng đang được phát triển. Hiện chơi được các hoạt động chung.", skills: [] },
 };
+const CAREERS = {
+  builder: ["Thợ học việc", "Kiến trúc sư", "Chủ thành", "Đại công trình sư"],
+  keeper: ["Người gieo hạt", "Nông học gia", "Người giữ sinh quyển", "Hiền giả tự nhiên"],
+  pathfinder: ["Người dò đường", "Nhà thám hiểm", "Thủ lĩnh viễn chinh", "Người mở cõi"],
+  connector: ["Người đổi hàng", "Thương nhân", "Lãnh chúa thương hội", "Sứ giả liên vùng"],
+};
+export const ACHIEVEMENTS = [
+  { id: "first-tool", name: "Đôi tay thành thạo", detail: "Thu thập 20 tài nguyên", stat: "gathered", value: 20, reward: { xp: 40, tool: 1 } },
+  { id: "settler", name: "Người đặt nền móng", detail: "Xây 5 công trình", stat: "built", value: 5, reward: { xp: 60, seed: 4 } },
+  { id: "grower", name: "Mùa vụ đầu tiên", detail: "Thu 30 sản phẩm", stat: "harvested", value: 30, reward: { xp: 70, tool: 1 } },
+  { id: "merchant", name: "Đường hàng hóa", detail: "Trao đổi 10 lần", stat: "traded", value: 10, reward: { xp: 80, ore: 4 } },
+  { id: "cartographer", name: "Bản đồ sống", detail: "Khảo sát 5 vùng", stat: "explored", value: 5, reward: { xp: 100, tool: 2 } },
+  { id: "founder", name: "Mầm đế chế", detail: "Xây 20 công trình", stat: "built", value: 20, reward: { xp: 180, brick: 12 } },
+];
+function progressPlayer(w, p, cmd, amount = 1) {
+  const xpByType = { gather: 3, build: 18, harvest: 14, "collect-building": 10, trade: 8, "npc-trade": 10, "survey-region": 20, demolish: 4, craft: 12, "configure-production": 3 };
+  const statByType = { gather: "gathered", build: "built", harvest: "harvested", "collect-building": "harvested", trade: "traded", "npc-trade": "traded", "survey-region": "explored" };
+  if (!xpByType[cmd.type]) return;
+  const stat = statByType[cmd.type];
+  if (stat) p.stats[stat] = (p.stats[stat] || 0) + Math.max(1, amount);
+  p.xp += xpByType[cmd.type] || 1;
+  const oldLevel = p.level;
+  p.level = Math.max(1, 1 + Math.floor(Math.sqrt(p.xp / 45)));
+  const tier = p.level >= 20 ? 4 : p.level >= 10 ? 3 : p.level >= 5 ? 2 : 1;
+  if (tier > (p.profession?.tier || 1)) {
+    p.profession = { tier, title: (CAREERS[p.classId] || CAREERS.builder)[tier - 1] };
+    event(w, "npc", `${p.name} đạt cấp ${p.level} và thăng nghề thành ${p.profession.title}.`, p.id);
+  } else p.profession = { tier, title: (CAREERS[p.classId] || CAREERS.builder)[tier - 1] };
+  if (p.level > oldLevel) p.unspentPower = (p.unspentPower || 0) + (p.level - oldLevel);
+  p.powers = { gather: Math.floor(p.level / 5), production: Math.floor(p.level / 7), trade: Math.floor(p.level / 10) };
+  for (const achievement of ACHIEVEMENTS) if (!p.achievements.includes(achievement.id) && (p.stats[achievement.stat] || 0) >= achievement.value) {
+    p.achievements.push(achievement.id);
+    p.xp += achievement.reward.xp || 0;
+    for (const [item, count] of Object.entries(achievement.reward)) if (item !== "xp") p.bag[item] = (p.bag[item] || 0) + count;
+    event(w, "achievement", `${p.name} hoàn thành thành tựu “${achievement.name}” và nhận phần thưởng.`, p.id);
+  }
+}
 export function characterProfile(input) {
   try {
   requireThat(input && typeof input === "object" && Object.hasOwn(CLASSES, input.classId), "Hãy chọn một class hợp lệ.");
@@ -397,6 +477,7 @@ export function join(w, id, now, profile) {
     seen: now,
     discoveries: [],
   };
+  ensureWorld(w);
 }
 
 function cartRoad(target) {
@@ -590,7 +671,7 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     cmd && typeof cmd === "object" && typeof cmd.type === "string",
     "Lệnh không hợp lệ.",
   );
-  let message = "";
+  let message = "", progressAmount = 1;
   if (cmd.type === "character") {
     const profile = characterProfile(cmd);
     near(p, POINTS.home);
@@ -608,7 +689,7 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       const sources = w.resources.filter(r => r.remaining > 0 && Math.hypot(r.x-p.x, r.z-p.z) <= 2);
       let capacity = Math.min(6, BAG_CAPACITY - Object.values(p.bag).reduce((a,b)=>a+b,0));
       requireThat(capacity > 0, `Túi đã đầy (${BAG_CAPACITY} đơn vị).`);
-      requireThat(sources.length > 0, "Cần đứng trong 2 ô quanh nguồn gỗ hoặc đá còn vật liệu.");
+      requireThat(sources.length > 0, "Cần đứng trong 2 ô quanh một nguồn tài nguyên còn vật liệu.");
       let total = 0;
       for (const r of sources) {
         const amount = Math.min(capacity, r.remaining);
@@ -648,6 +729,8 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       stock: { wood: 0, stone: 0, food: 0, fiber: 0, clay: 0 },
       progress: 0,
       animals: cmd.kind === "pasture" ? 2 : 0,
+      cropType: cmd.kind === "field" ? "grain" : undefined,
+      animalType: cmd.kind === "pasture" ? "chicken" : undefined,
     };
     (w.buildings ??= []).push(building);
     building.cause = event(
@@ -692,15 +775,56 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     message = `Đã ${cmd.direction === "deposit" ? "cất" : "lấy"} ${cmd.amount} ${ITEMS[cmd.resource]}.`;
   } else if (cmd.type === "collect-building") {
     const b = (w.buildings || []).find(building => building.id === cmd.target);
-    requireThat(b && ["field", "pasture"].includes(b.kind), "Đây không phải công trình sản xuất.");
+    requireThat(b && !["house", "canal"].includes(b.kind), "Đây không phải công trình có kho sản phẩm.");
     near(p, b);
-    const available = b.stock?.food || 0;
-    const room = BAG_CAPACITY - Object.values(p.bag).reduce((sum, amount) => sum + amount, 0);
-    const amount = Math.min(available, room);
-    requireThat(amount > 0, available ? "Túi đã đầy." : "Chưa có sản phẩm để thu gom.");
-    b.stock.food -= amount;
-    p.bag.food += amount;
-    message = `Đã thu ${amount} thức ăn từ ${BUILDINGS[b.kind].name.toLowerCase()}.`;
+    let room = BAG_CAPACITY - Object.values(p.bag).reduce((sum, amount) => sum + amount, 0), amount = 0;
+    for (const item of Object.keys(ITEMS)) {
+      const moved = Math.min(b.stock?.[item] || 0, room);
+      if (!moved) continue;
+      b.stock[item] -= moved; p.bag[item] += moved; room -= moved; amount += moved;
+    }
+    requireThat(amount > 0, room ? "Chưa có sản phẩm để thu gom." : "Túi đã đầy.");
+    progressAmount = amount;
+    message = `Đã thu ${amount} sản phẩm từ ${BUILDINGS[b.kind].name.toLowerCase()}.`;
+  } else if (cmd.type === "configure-production") {
+    const b = (w.buildings || []).find(building => building.id === cmd.target);
+    requireThat(b && b.owner === playerId, "Bạn chỉ có thể điều chỉnh công trình của mình.");
+    near(p, b);
+    if (b.kind === "field") {
+      requireThat(Object.hasOwn(CROPS, cmd.product), "Giống cây không hợp lệ.");
+      requireThat((p.bag.seed || 0) >= 1, "Cần 1 hạt giống để đổi vụ.");
+      p.bag.seed--; b.cropType = cmd.product; b.progress = 0;
+      w.biodiversity.crops = [...new Set([...w.biodiversity.crops, cmd.product])];
+      message = `Đã gieo ${CROPS[cmd.product].name.toLowerCase()}.`;
+    } else if (b.kind === "pasture") {
+      requireThat(Object.hasOwn(LIVESTOCK, cmd.product), "Vật nuôi không hợp lệ.");
+      requireThat((p.bag.food || 0) >= 2, "Cần 2 khẩu phần để đưa đàn mới về chuồng.");
+      p.bag.food -= 2; b.animalType = cmd.product; b.animals = Math.max(2, Math.min(4, b.animals || 2)); b.progress = 0;
+      w.biodiversity.livestock = [...new Set([...w.biodiversity.livestock, cmd.product])];
+      message = `Chuồng chuyển sang nuôi ${LIVESTOCK[cmd.product].name.toLowerCase()}.`;
+    } else throw new Error("Công trình này không có giống sản xuất để đổi.");
+  } else if (cmd.type === "craft") {
+    const b = (w.buildings || []).find(building => building.id === cmd.target && building.kind === "workshop");
+    requireThat(b, "Cần chọn một xưởng công cụ."); near(p, b);
+    const recipes = {
+      tool: { cost: { wood: 2, ore: 2 }, output: ["tool", 1] },
+      plank: { cost: { wood: 2 }, output: ["plank", 3] },
+      brick: { cost: { clay: 3, wood: 1 }, output: ["brick", 3] },
+      ration: { cost: { grain: 2, vegetable: 1 }, output: ["food", 4] },
+    };
+    const recipe = recipes[cmd.recipe]; requireThat(recipe, "Công thức không hợp lệ.");
+    spend(p, recipe.cost); const [item, count] = recipe.output; p.bag[item] += count;
+    message = `Đã chế tạo ${count} ${ITEMS[item]}.`;
+  } else if (cmd.type === "demolish") {
+    const index = (w.buildings || []).findIndex(building => building.id === cmd.target);
+    const b = w.buildings[index]; requireThat(b && b.owner === playerId, "Bạn chỉ có thể tháo dỡ công trình của mình."); near(p, b);
+    const definition = BUILDINGS[b.kind], returned = [];
+    for (const [item, count] of Object.entries(definition)) if (Object.hasOwn(ITEMS, item) && typeof count === "number") {
+      const back = Math.floor(count / 2); if (back) { p.bag[item] += back; returned.push(`${back} ${ITEMS[item]}`); }
+    }
+    w.buildings.splice(index, 1);
+    event(w, "build", `${p.name} tháo dỡ ${definition.name.toLowerCase()} để quy hoạch lại đất.`, b.id);
+    message = `Đã tháo dỡ công trình${returned.length ? `, thu hồi ${returned.join(", ")}` : ""}.`;
   } else if (cmd.type === "trade") {
     near(p, POINTS.market);
     const recipes = {
@@ -708,6 +832,10 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       clay_stone: { give: ["clay", 3], take: ["stone", 2], label: "3 đất sét đổi 2 đá" },
       food_fiber: { give: ["food", 2], take: ["fiber", 3], label: "2 thức ăn đổi 3 sợi cỏ" },
       wood_clay: { give: ["wood", 2], take: ["clay", 2], label: "2 gỗ đổi 2 đất sét" },
+      grain_seed: { give: ["grain", 3], take: ["seed", 2], label: "3 ngũ cốc đổi 2 hạt giống" },
+      wool_ore: { give: ["wool", 2], take: ["ore", 2], label: "2 len đổi 2 quặng" },
+      herb_tool: { give: ["herb", 4], take: ["tool", 1], label: "4 thảo dược đổi 1 công cụ" },
+      milk_clay: { give: ["milk", 3], take: ["clay", 3], label: "3 sữa đổi 3 đất sét" },
     };
     const recipe = recipes[cmd.recipe];
     requireThat(recipe, "Món trao đổi không hợp lệ.");
@@ -786,13 +914,16 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
       Object.values(p.bag).reduce((a, b) => a + b, 0) < BAG_CAPACITY,
       `Túi đã đầy (${BAG_CAPACITY} đơn vị).`,
     );
-    const amount = Math.min(p.classId === "builder" && r.type === "stone" ? 2 : 1, r.remaining,
+    const powerBonus = (p.bag.tool || 0) > 0 ? 1 : 0;
+    const levelBonus = p.powers?.gather || 0;
+    const amount = Math.min((p.classId === "builder" && ["stone", "ore"].includes(r.type) ? 2 : 1) + powerBonus + levelBonus, r.remaining,
       BAG_CAPACITY - Object.values(p.bag).reduce((a,b)=>a+b,0));
     r.remaining -= amount;
     p.bag[r.type] += amount;
     p.lastGather = now;
     if (r.type === "wood") w.trees = Math.max(0, w.trees - 0.25);
     if (r.remaining <= 0) r.depletedDay = w.day;
+    progressAmount = amount;
     message = `Đã nhặt ${amount} ${ITEMS[r.type] || r.type}.`;
   } else if (cmd.type === "bridge") {
     near(p, { x: 14, z: 17 });
@@ -882,6 +1013,23 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     w.depot -= amount;
     p.bag.food += amount;
     message = `Đã lấy ${amount} khẩu phần từ kho.`;
+  } else if (cmd.type === "npc-trade") {
+    const n = w.npcs.find(person => person.id === cmd.target);
+    requireThat(n, "Không tìm thấy người dân này.");
+    const home = POINTS[n.village], nearHome = Math.hypot(p.x - home.x, p.z - home.z) <= 4;
+    const nearWork = Number.isFinite(n.workX) && Math.hypot(p.x - n.workX, p.z - n.workZ) <= 4;
+    requireThat(nearHome || nearWork, "Hãy đến gần nơi người dân đang sống hoặc làm việc.");
+    const deals = n.job === "Đánh cá" ? [["fiber", 2], ["food", 3]]
+      : n.job === "Chăn nuôi" ? [["grain", 2], ["wool", 2]]
+      : n.job === "Thợ thủ công" ? [["ore", 2], ["tool", 1]]
+      : n.job === "Buôn bán" ? [["clay", 2], ["herb", 3]]
+      : [["wood", 2], ["seed", 3]];
+    const [[give, giveAmount], [take, takeAmount]] = deals;
+    requireThat((p.bag[give] || 0) >= giveAmount, `${n.name} cần ${giveAmount} ${ITEMS[give]}.`);
+    p.bag[give] -= giveAmount; p.bag[take] += takeAmount; p.trades = (p.trades || 0) + 1;
+    n.needs.social = Math.min(100, n.needs.social + 12); n.thought = `${p.name} đã trao đổi công bằng với mình. Có thể tin tưởng người này.`;
+    event(w, "trade", `${p.name} trao đổi với ${n.name}: ${giveAmount} ${ITEMS[give]} lấy ${takeAmount} ${ITEMS[take]}.`, n.id);
+    message = `${n.name} đồng ý trao đổi ${takeAmount} ${ITEMS[take]}.`;
   } else if (cmd.type === "donate") {
     requireThat(
       cmd.target === "west" || cmd.target === "east",
@@ -915,19 +1063,20 @@ export function applyCommand(w, playerId, cmd, now = Date.now()) {
     );
     message = "Đã ghi lại tri thức về mực nước.";
   } else if (cmd.type === "survey-region") {
-    requireThat(["mistwood", "highland", "farreach"].includes(cmd.target), "Vùng khám phá không hợp lệ.");
+    requireThat(["mistwood", "highland", "farreach", "marsh", "ashlands", "frostlands"].includes(cmd.target), "Vùng khám phá không hợp lệ.");
     near(p, POINTS[cmd.target]);
     requireThat(!p.discoveries.includes(cmd.target), "Bạn đã khảo sát vùng này.");
     p.discoveries.push(cmd.target);
-    const item = cmd.target === "mistwood" ? "fiber" : cmd.target === "highland" ? "clay" : "stone";
+    const item = cmd.target === "mistwood" ? "fiber" : cmd.target === "highland" ? "clay" : cmd.target === "marsh" ? "herb" : cmd.target === "ashlands" ? "ore" : "stone";
     const room = BAG_CAPACITY - Object.values(p.bag).reduce((sum, amount) => sum + amount, 0);
     const found = Math.min(2, room);
     p.bag[item] += found;
-    event(w, "knowledge", `${p.name} mở bản đồ ${cmd.target === "mistwood" ? "Rừng Sương" : cmd.target === "highland" ? "Cao nguyên Đỏ" : "Biên Viễn"} và tìm thấy ${found} ${ITEMS[item]}.`, cmd.target);
+    event(w, "knowledge", `${p.name} mở bản đồ ${{ mistwood: "Rừng Sương", highland: "Cao nguyên Đỏ", farreach: "Biên Viễn", marsh: "Đầm Sương", ashlands: "Đất Tro", frostlands: "Băng Nguyên" }[cmd.target]} và tìm thấy ${found} ${ITEMS[item]}.`, cmd.target);
     message = `Đã khảo sát vùng mới${found ? ` và tìm thấy ${found} ${ITEMS[item]}` : ""}.`;
   } else {
     throw new Error("Lệnh không được hỗ trợ.");
   }
+  progressPlayer(w, p, cmd, progressAmount);
   p.seen = now;
   return message;
 }
@@ -961,7 +1110,7 @@ export function simulateDay(w, production = true) {
     if (r.remaining >= r.capacity) { r.regrowth = 0; continue; }
     const weatherFactor = w.weather === "Mưa lớn" ? 1.45 : w.weather === "Hạn" ? 0.45 : 1;
     const rate = r.type === "wood" ? (0.08 + w.moisture * 0.2) * weatherFactor
-      : r.type === "fiber" ? (0.18 + w.moisture * 0.32) * weatherFactor
+      : r.type === "fiber" || r.type === "herb" ? (0.18 + w.moisture * 0.32) * weatherFactor
       : r.type === "clay" ? (w.weather === "Mưa lớn" ? 0.2 : 0.045)
       : (w.weather === "Mưa lớn" ? 0.07 : 0.018);
     r.regrowth += rate * r.fertility;
@@ -972,13 +1121,15 @@ export function simulateDay(w, production = true) {
   w.trees = Math.max(0, Math.min(100, w.trees + (livingWood > 35 ? 0.45 : -0.15) + (w.weather === "Mưa lớn" ? 0.35 : 0)));
   for (const village of w.villages) {
     const people = w.npcs.filter(n => n.village === village.id).sort((a, b) => a.id.localeCompare(b.id));
-    const sites = w.buildings.filter(b => ["field", "pasture"].includes(b.kind) && b.village === village.id);
+    const sites = w.buildings.filter(b => !["house", "storehouse", "canal"].includes(b.kind) && b.village === village.id);
     let worker = 0;
     for (const n of people) {
-      if (n.job === "Trồng trọt") {
-        const site = sites.length ? sites[worker++ % sites.length] : { id: "farm", ...POINTS.farm };
+      if (n.job !== "Đánh cá") {
+        const preferred = n.job === "Chăn nuôi" ? ["pasture"] : n.job === "Thợ thủ công" ? ["workshop", "quarry", "lumberyard"] : n.job === "Buôn bán" ? ["marketstall"] : ["field", "lumberyard"];
+        const choices = sites.filter(site => preferred.includes(site.kind));
+        const site = choices.length ? choices[worker++ % choices.length] : sites.length ? sites[worker++ % sites.length] : { id: "farm", ...POINTS.farm };
         n.worksite = site.id; n.workX = site.x; n.workZ = site.z;
-        n.activity = site.kind === "pasture" ? "Chăm đàn vật nuôi" : "Chăm ruộng và thu hoạch";
+        n.activity = site.kind === "pasture" ? "Chăm đàn vật nuôi" : site.kind === "workshop" ? "Chế tạo công cụ" : site.kind === "quarry" ? "Khai thác đá và quặng" : site.kind === "lumberyard" ? "Chăm rừng sản xuất" : site.kind === "marketstall" ? "Trao đổi hàng hóa" : "Chăm ruộng và thu hoạch";
       } else {
         n.worksite = "river";
         n.workX = village.id === "east" ? 18.7 : 13.3;
@@ -987,19 +1138,39 @@ export function simulateDay(w, production = true) {
       }
     }
   }
-  for (const b of w.buildings.filter(b => ["field", "pasture"].includes(b.kind))) {
+  for (const b of w.buildings.filter(b => !["house", "storehouse", "canal"].includes(b.kind))) {
     const workers = w.npcs.filter(n => n.worksite === b.id).length;
+    const ownerPower = w.players[b.owner]?.powers?.production || 0;
     if (b.kind === "field") {
-      b.progress += (0.12 + w.moisture * 0.32) * (1 + workers * 0.12);
-      if (b.progress >= 1 && b.stock.food < 80) {
-        const cycles = Math.floor(b.progress), amount = Math.min(80 - b.stock.food, cycles * (4 + Math.min(3, workers)));
-        b.stock.food += amount; b.progress -= cycles; b.lastYield = amount;
+      const crop = CROPS[b.cropType] || CROPS.grain;
+      const canals = w.buildings.filter(other => other.kind === "canal" && Math.hypot(other.x - b.x, other.z - b.z) <= 6).length;
+      b.localMoisture = Math.max(0, Math.min(1, w.moisture + canals * .16));
+      const suitability = Math.max(.2, 1 - Math.abs(b.localMoisture - crop.moisture));
+      b.progress += suitability / crop.days * (1 + workers * .14 + ownerPower * .08);
+      if (b.progress >= 1 && b.stock[crop.item] < 80) {
+        const cycles = Math.floor(b.progress), amount = Math.min(80 - b.stock[crop.item], cycles * (crop.yield + Math.min(4, workers)));
+        b.stock[crop.item] += amount; b.stock.seed = Math.min(80, b.stock.seed + cycles);
+        b.progress -= cycles; b.lastYield = amount;
       }
-    } else {
+    } else if (b.kind === "pasture") {
+      const animal = LIVESTOCK[b.animalType] || LIVESTOCK.chicken;
       if (w.grass > 45 && w.day % 4 === 0) b.animals = Math.min(8, b.animals + 1);
       if (w.grass < 18 && b.animals > 2) b.animals--;
-      const amount = Math.min(80 - b.stock.food, Math.floor(b.animals * 0.35 + workers * 0.4));
-      if (amount > 0) { b.stock.food += amount; b.lastYield = amount; w.grass = Math.max(0, w.grass - b.animals * 0.22); }
+      b.progress += (1 / animal.days) * (1 + workers * .1);
+      if (b.progress >= 1) {
+        const cycles = Math.floor(b.progress), amount = Math.min(80 - b.stock[animal.item], cycles * animal.yield + Math.min(3, workers));
+        b.stock[animal.item] += amount; b.progress -= cycles; b.lastYield = amount;
+      }
+      w.grass = Math.max(0, w.grass - b.animals * animal.grass * .12);
+    } else if (b.kind === "lumberyard" && w.trees > 20) {
+      const amount = Math.min(80 - b.stock.wood, 1 + Math.floor(workers / 2));
+      b.stock.wood += amount; w.trees = Math.max(0, w.trees - amount * .18); b.lastYield = amount;
+    } else if (b.kind === "quarry") {
+      const amount = Math.min(80 - b.stock.stone, 1 + Math.floor(workers / 2));
+      b.stock.stone += amount; if (w.day % 3 === 0) b.stock.ore = Math.min(80, b.stock.ore + 1); b.lastYield = amount;
+    } else if (b.kind === "marketstall") {
+      const item = ["seed", "fiber", "clay", "herb"][w.day % 4];
+      b.stock[item] = Math.min(80, b.stock[item] + 1 + Math.floor(workers / 2));
     }
   }
   // Cart work advances only in advance(), split at work-credit boundaries.
@@ -1036,6 +1207,19 @@ export function simulateDay(w, production = true) {
       n.hungryDays = n.fedToday ? 0 : (n.hungryDays || 0) + 1;
       n.hungerDebt = Math.max(0, (n.hungerDebt || 0) + (n.fedToday ? -0.5 : 1));
       n.lastDecisionReason ??= n.fedToday ? "Ở lại làng, làm việc và nhận khẩu phần hằng ngày." : "Đang chờ thêm thức ăn tại làng.";
+      n.needs.hunger = Math.max(0, Math.min(100, n.needs.hunger + (n.fedToday ? 18 : -28)));
+      n.needs.energy = Math.max(15, Math.min(100, 62 + ((w.day + Number(n.id.split("-").at(-1))) % 29)));
+      n.needs.social = Math.max(10, Math.min(100, n.needs.social + (people.length > 6 ? 3 : -2)));
+      n.needs.safety = Math.max(10, Math.min(100, 72 + (w.predators < 5 ? 10 : -18) + (w.weather === "Mưa lớn" ? -8 : 0)));
+      n.needs.purpose = Math.max(10, Math.min(100, 55 + (n.worksite && n.worksite !== "farm" ? 22 : 0) + (n.fedToday ? 8 : -12)));
+      const lowest = Object.entries(n.needs).sort((a, b) => a[1] - b[1])[0];
+      n.mood = lowest[1] < 25 ? "Bất an" : lowest[1] < 45 ? "Lo lắng" : Object.values(n.needs).every(value => value > 72) ? "Hứng khởi" : "Bình tâm";
+      n.thought = lowest[0] === "hunger" ? "Mình cần tìm thêm thức ăn trước khi nghĩ tới việc khác."
+        : lowest[0] === "energy" ? "Hôm nay nên làm chậm lại và nghỉ trước khi trời tối."
+        : lowest[0] === "social" ? `Mình muốn gặp người ở ${v.name} và nghe chuyện của họ.`
+        : lowest[0] === "safety" ? "Dấu chân thú săn mồi đang ở quá gần làng."
+        : `Công việc ${n.activity?.toLowerCase() || "hôm nay"} đang tạo ra thay đổi thật sự.`;
+      n.goal = n.needs.hunger < 45 ? "Tìm nguồn thức ăn ổn định" : n.job === "Chăn nuôi" ? "Mở rộng đàn vật nuôi" : n.job === "Thợ thủ công" ? "Tạo thêm công cụ" : n.job === "Buôn bán" ? "Mở tuyến hàng mới" : n.job === "Đánh cá" ? "Giữ nguồn cá ổn định" : "Cải thiện vụ mùa";
     }
     const betterJob = farmYield > fishYield + 0.15 ? "Trồng trọt" : fishYield > farmYield + 0.15 ? "Đánh cá" : null;
     const candidate = rationOrder.find(n => betterJob && n.job !== betterJob && (n.hungryDays >= 2 || n.hungerDebt >= 2) && w.day - (n.jobChangedDay ?? -5) >= 5);
@@ -1047,6 +1231,22 @@ export function simulateDay(w, production = true) {
         ? `Chuyển sang trồng trọt vì ruộng ẩm ${Math.round(w.moisture * 100)}% cho sản lượng tốt hơn đánh cá.`
         : `Chuyển sang đánh cá vì nguồn cá ${Math.round(w.fish)}% cho sản lượng tốt hơn ruộng hiện tại.`;
       candidate.decisionCause = event(w, "npc", `${candidate.name} đổi nghề từ ${from.toLowerCase()} sang ${betterJob.toLowerCase()} sau những bữa thiếu ăn. ${candidate.lastDecisionReason}`, v.id);
+    }
+    if (w.day % 11 === 0 && people.length) {
+      const specialist = people[w.day % people.length];
+      const available = [
+        w.buildings.some(b => b.kind === "pasture" && b.village === v.id) && "Chăn nuôi",
+        w.buildings.some(b => b.kind === "workshop" && b.village === v.id) && "Thợ thủ công",
+        w.buildings.some(b => b.kind === "marketstall" && b.village === v.id) && "Buôn bán",
+      ].filter(Boolean);
+      if (available.length && w.day - (specialist.jobChangedDay ?? -20) >= 9) {
+        const next = available[(w.day + people.length) % available.length];
+        if (specialist.job !== next) {
+          const from = specialist.job; specialist.job = next; specialist.jobChangedDay = w.day;
+          specialist.lastDecisionReason = `Tự chọn nghề ${next.toLowerCase()} vì làng đã có công trình phù hợp và đang cần người phụ trách.`;
+          specialist.decisionCause = event(w, "npc", `${specialist.name} rời nghề ${from.toLowerCase()} để trở thành ${next.toLowerCase()}.`, v.id);
+        }
+      }
     }
   }
   w.fish = Math.max(0, w.fish - catches * 0.6);
@@ -1075,6 +1275,46 @@ export function simulateDay(w, production = true) {
     const houses = (w.buildings || []).filter(b => b.kind === "house" && b.village === destination.v.id && b.cause).map(b => b.cause);
     n.decisionCause = event(w, "npc", `${n.name} ${n.lastDecisionReason.charAt(0).toLowerCase()}${n.lastDecisionReason.slice(1)}`, destination.v.id, [w.bridgeCause, ...houses].filter(Boolean));
   }
+  if (w.day % 9 === 0) {
+    const roll = (Math.imul(w.day, 1103515245) >>> 8) % 5;
+    if (roll === 0) {
+      w.moisture = Math.min(1, w.moisture + .24); w.climateShift = "Lũ theo mùa";
+      for (const r of w.resources.filter(r => r.type === "clay")) r.remaining = Math.min(r.capacity, r.remaining + 2);
+      event(w, "world", "Một trận lũ đổi dòng chảy nhỏ, bồi thêm đất sét nhưng làm ruộng thấp bị úng.", "marsh");
+    } else if (roll === 1) {
+      w.trees = Math.max(0, w.trees - 9); w.climateShift = "Cháy rừng khô";
+      for (const r of w.resources.filter(r => r.type === "wood" && r.x > 30).slice(0, 4)) r.remaining = Math.max(0, r.remaining - 3);
+      event(w, "world", "Sét mùa hạn gây cháy rừng cục bộ. Tro làm đất màu hơn nhưng nguồn gỗ phía đông suy giảm.", "ashlands");
+    } else if (roll === 2) {
+      w.marketStock.seed += 5; w.marketStock.tool += 1; w.climateShift = "Đoàn thương nhân";
+      event(w, "trade", "Một đoàn thương nhân lạ đến Chợ Phiên, mang theo hạt giống và công cụ mới.", "market");
+    } else if (roll === 3) {
+      w.grazers = Math.min(64, w.grazers + 6); w.biodiversity.mutations++;
+      event(w, "world", "Một đàn thú di cư tiến vào đồng cỏ, kéo theo những giống cây chưa từng mọc ở thung lũng.", "farreach");
+    } else {
+      w.fish = Math.min(100, w.fish + 12); w.climateShift = "Mùa cá ngược dòng";
+      event(w, "world", "Đàn cá từ hạ lưu bất ngờ quay lại với số lượng lớn, thay đổi sinh kế của hai làng.", "east");
+    }
+    w.developments.push({ day: w.day, kind: w.climateShift || "Biến động", roll });
+    w.developments = w.developments.slice(-24);
+  }
+  if (w.day % 20 === 0 && w.buildings.filter(b => b.owner === "community").length < 12) {
+    const village = w.villages[w.day % w.villages.length], center = POINTS[village.id];
+    const kind = village.food < w.npcs.filter(n => n.village === village.id).length * 2 ? "field" : w.grass > 45 ? "pasture" : "house";
+    for (let i = 0; i < 16; i++) {
+      const a = (i + w.day) * Math.PI / 8, x = Math.round(center.x + Math.cos(a) * (4 + i % 3)), z = Math.round(center.z + Math.sin(a) * (4 + i % 3));
+      if (!walkable(w, x, z) || reservedTile(x, z) || w.resources.some(r => r.remaining > 0 && r.x === x && r.z === z)) continue;
+      const building = { id: `community-${w.day}`, kind, x, z, owner: "community", village: village.id,
+        stock: Object.fromEntries(Object.keys(ITEMS).map(item => [item, 0])), progress: 0,
+        cropType: kind === "field" ? Object.keys(CROPS)[w.day % Object.keys(CROPS).length] : undefined,
+        animalType: kind === "pasture" ? Object.keys(LIVESTOCK)[w.day % Object.keys(LIVESTOCK).length] : undefined,
+        animals: kind === "pasture" ? 2 : 0 };
+      w.buildings.push(building);
+      event(w, "build", `${village.name} tự góp công dựng ${BUILDINGS[kind].name.toLowerCase()} tại ô ${x}, ${z}.`, building.id);
+      break;
+    }
+  }
+  w.worldEra = Math.max(w.worldEra, Math.floor(w.day / 360) + 1);
 }
 export function advance(w, now, active, speed = 30) {
   ensureWorld(w);

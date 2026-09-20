@@ -1504,3 +1504,48 @@ dialog .class-card small { font-size: 11px; line-height: 1.6; color: #c2c9b7; ma
   .map-compass { right: 18px; bottom: 154px; }
   #toast { bottom: 154px; }
 }
+.item-token {
+  display: inline-block;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  border-radius: 2px;
+  background-image: url("/item-icons.svg");
+  background-size: 600% 300%;
+  image-rendering: pixelated;
+}
+.item-token.wood{background-position:0 0}.item-token.stone{background-position:20% 0}.item-token.food{background-position:40% 0}
+.item-token.fiber{background-position:60% 0}.item-token.clay{background-position:80% 0}.item-token.seed{background-position:100% 0}
+.item-token.grain{background-position:0 50%}.item-token.vegetable{background-position:20% 50%}.item-token.fruit{background-position:40% 50%}
+.item-token.herb{background-position:60% 50%}.item-token.wool{background-position:80% 50%}.item-token.milk{background-position:100% 50%}
+.item-token.egg{background-position:0 100%}.item-token.leather{background-position:20% 100%}.item-token.ore{background-position:40% 100%}
+.item-token.tool{background-position:60% 100%}.item-token.plank{background-position:80% 100%}.item-token.brick{background-position:100% 100%}
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+.inventory-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #344b4c;
+  background: #11222c;
+  color: #839793;
+}
+.inventory-item.owned { color:#e6ddc3; border-color:#63735b; }
+.inventory-item strong { color:#edcf86; font-variant-numeric:tabular-nums; }
+.achievements-list { display:grid; gap:9px; margin-top:18px; }
+.achievement-card { padding:12px; border:1px solid #344b4c; background:#11222c; opacity:.66; }
+.achievement-card.unlocked { opacity:1; border-color:#76875f; background:#20382f; }
+.achievement-card strong, .achievement-card span { display:block; }
+.achievement-card span { margin-top:5px; color:#9eb0aa; font-size:12px; }
+.dialog-close { float:right; min-width:34px; padding:6px; font-size:18px; }
+#player-progression { color:#d8c489; }
+#production-panel { margin:14px 0; padding:12px; border:1px solid #415355; background:#10222c; }
+#production-panel label { display:block; margin-bottom:7px; color:#c9d2bd; font-size:11px; }
+#production-panel select, #production-panel button { width:100%; margin-top:7px; }
+@media (max-width: 620px) { .inventory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

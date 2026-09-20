@@ -42,6 +42,13 @@ export function createGameServer({
                     focusUntil: p.focusUntil || 0,
                     discoveries: p.discoveries,
                     trades: p.trades || 0,
+                    xp: p.xp || 0,
+                    level: p.level || 1,
+                    profession: p.profession,
+                    achievements: p.achievements || [],
+                    stats: p.stats || {},
+                    unspentPower: p.unspentPower || 0,
+                    powers: p.powers || {},
                     moveSeq: p.moveSeq || 0,
                   }
                 : {}),
@@ -101,6 +108,7 @@ export function createGameServer({
     ["/", ["public/index.html", "text/html"]],
     ["/app.js", ["public/app.js", "text/javascript"]],
     ["/style.css", ["public/style.css", "text/css"]],
+    ["/item-icons.svg", ["public/item-icons.svg", "image/svg+xml"]],
     [
       "/three.js",
       ["node_modules/three/build/three.module.js", "text/javascript"],

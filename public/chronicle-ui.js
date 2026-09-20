@@ -1,6 +1,6 @@
 const kinds = {
   all: "Tất cả", build: "Công trình", logistics: "Chuyến hàng",
-  food: "Lương thực", npc: "Dân làng", water: "Nguồn nước", trade: "Trao đổi",
+  food: "Lương thực", npc: "Dân làng", water: "Nguồn nước", trade: "Trao đổi", achievement: "Thành tựu",
 };
 const make = (tag, className, text) => {
   const element = document.createElement(tag);

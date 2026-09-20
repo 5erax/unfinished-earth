@@ -15,6 +15,7 @@ const files = {
   "/valley-ui.js": ["public/valley-ui.js", "text/javascript; charset=utf-8"],
   "/chronicle-ui.js": ["public/chronicle-ui.js", "text/javascript; charset=utf-8"],
   "/story.css": ["public/story.css", "text/css; charset=utf-8"],
+  "/item-icons.svg": ["public/item-icons.svg", "image/svg+xml"],
   "/motion.js": ["public/motion.js", "text/javascript; charset=utf-8"],
   "/command-journal.js": [
     "public/command-journal.js",

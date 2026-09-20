@@ -1,7 +1,7 @@
 // Original code-drawn pixel art; the camera never mutates authoritative world state.
 const TILE = 24;
 const PAD = 72;
-const WORLD_SIZE = 64;
+const WORLD_SIZE = 96;
 const LAND_MAX = WORLD_SIZE - 2;
 const DAY_MS = 1_800_000;
 const CLASS_COLORS = {builder:'#c78a4c',keeper:'#78a868',pathfinder:'#e0b65b',connector:'#819fce'};
@@ -13,6 +13,8 @@ const LANDMARKS = [
   ['market',36,10,'Chợ Phiên'], ['mistwood',8,40,'Rừng Sương'],
   ['highland',40,32,'Cao nguyên Đỏ'],
   ['farreach',54,48,'Biên Viễn'],
+  ['marsh',74,18,'Đầm Sương'], ['ashlands',82,50,'Đất Tro'],
+  ['frostlands',76,80,'Băng Nguyên'],
 ];
 const clamp = (n,a,b) => Math.max(a,Math.min(b,n));
 const noise = (x,y,s=0) => {
@@ -48,7 +50,7 @@ export class Map2D {
     container.replaceChildren(this.canvas);
     this.ctx=this.canvas.getContext('2d',{alpha:false});
     this.choose=choose; this.travel=travel;
-    this.zoom=1; this.center={x:31.5,z:31.5}; this.showLabels=true; this.targets=[];
+    this.zoom=2.1; this.center={x:17,z:22}; this.showLabels=true; this.targets=[];
     this.animationTime=0;this.lastAnimationAt=null;this.actorPositions=new Map();
     this.reducedMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)');
     this.terrain=this.makeTerrain();
@@ -89,14 +91,14 @@ export class Map2D {
     this.tile=(this.baseTile||1)*this.zoom;const after=this.unproject(px,py);
     this.center.x+=before.x-after.x;this.center.z+=before.z-after.z;this.clampView();
   }
-  resetView(){this.zoom=1;this.center={x:31.5,z:31.5};this.tile=this.baseTile||1;}
+  resetView(){this.zoom=1;this.center={x:47.5,z:47.5};this.tile=this.baseTile||1;}
   focus(x,z){
     if(!Number.isFinite(x)||!Number.isFinite(z))return;
     this.zoom=Math.max(this.zoom,1.8);this.tile=(this.baseTile||1)*this.zoom;this.center={x,z};this.clampView();
   }
   toggleLabels(){this.showLabels=!this.showLabels;return this.showLabels;}
   clampView(){
-    const hx=Math.min(32.5,(this.w||1)/(2*(this.tile||1))),hz=Math.min(32.5,(this.h||1)/(2*(this.tile||1)));
+    const hx=Math.min(48.5,(this.w||1)/(2*(this.tile||1))),hz=Math.min(48.5,(this.h||1)/(2*(this.tile||1)));
     this.center.x=clamp(this.center.x,-1+hx,WORLD_SIZE-hx);this.center.z=clamp(this.center.z,-1+hz,WORLD_SIZE-hz);
   }
   pick(px,py){
@@ -138,7 +140,7 @@ export class Map2D {
         if(z===0){sy+=inset;sh-=inset;}if(z===WORLD_SIZE-1)sh-=inset;
         rect(c,sx,sy,sw,sh,'#79c1b5');rect(c,sx+(x===0?3:0),sy+(z===0?3:0),Math.max(0,sw-3),Math.max(0,sh-3),'#d4c98d');continue;
       }
-      const palette=z>31&&x<15?['#477a4c','#568b51','#639753','#729f58','#416f49']:x>31?['#9a874f','#a69355','#b29b5b','#8e7a48','#aa9050']:['#6f9c50','#78a655','#80ad5d','#86b25f','#729e52'];
+      const palette=z>67?['#b7c9c3','#c9d7cf','#9eb8b5','#d7ded1','#abc1bb']:x>68&&z>36?['#765846','#8c684d','#9e7753','#6b5144','#ad8157']:x>62&&z<34?['#4f8467','#5d9673','#6a9f78','#47765f','#79aa7d']:z>31&&x<15?['#477a4c','#568b51','#639753','#729f58','#416f49']:x>31?['#9a874f','#a69355','#b29b5b','#8e7a48','#aa9050']:['#6f9c50','#78a655','#80ad5d','#86b25f','#729e52'];
       const grass=palette[Math.floor(noise(Math.floor(x/2),Math.floor(z/2),13)*5)];
       rect(c,px,py,TILE,TILE,grass);
       for(let j=0;j<13;j++)rect(c,px+Math.floor(noise(x,z,j+5)*11)*2,py+Math.floor(noise(z,x,j+27)*11)*2,j%3?2:4,2,j%2?'#8bb761':'#69964c');
@@ -247,7 +249,7 @@ export class Map2D {
   draw(state,selected,_angle=0,preview=null){
     this.preview=preview;this.spriteTargets=[];
     this.state=state;this.w=Math.max(1,this.container.clientWidth);this.h=Math.max(1,this.container.clientHeight);
-    this.baseTile=Math.min(this.w/69,this.h/68);this.tile=this.baseTile*this.zoom;this.clampView();
+    this.baseTile=Math.min(this.w/101,this.h/100);this.tile=this.baseTile*this.zoom;this.clampView();
     const dpr=Math.min(window.devicePixelRatio||1,2),width=Math.round(this.w*dpr),height=Math.round(this.h*dpr);
     if(this.canvas.width!==width||this.canvas.height!==height){this.canvas.width=width;this.canvas.height=height;this.canvas.style.width=`${this.w}px`;this.canvas.style.height=`${this.h}px`;}
     const display=this.ctx;display.setTransform(dpr,0,0,dpr,0,0);display.imageSmoothingEnabled=false;rect(display,0,0,this.w,this.h,'#245a78');
@@ -309,11 +311,12 @@ export class Map2D {
       }else if(id==='home'||id==='depot'||id==='market')objects.push({id,kind:'house',x,z,variant:id==='depot'||id==='market'?1:0});
       else if(id==='ruin')objects.push({id,kind:'ruin',x,z});
       else if(id==='mistwood')objects.push({id,kind:'wood',x,z,seed:91});
-      else if(id==='highland'||id==='farreach')objects.push({id,kind:'stone',x,z,seed:id==='farreach'?93:92});
+      else if(['highland','farreach','ashlands','frostlands'].includes(id))objects.push({id,kind:'stone',x,z,seed:92+x});
+      else if(id==='marsh')objects.push({id,kind:'fiber',x,z,seed:94});
     }
     // Preview vegetation has no interactions. Live forests follow actual resources.
-    const resourceNames={wood:'Gỗ',stone:'Đá',fiber:'Sợi cỏ',clay:'Đất sét'};
-    const resources=state?.resources||Array.from({length:64},(_,i)=>({id:`preview-${i}`,type:i%4===0?'stone':i%4===1?'fiber':'wood',x:2+(i*17)%59,z:2+(i*29)%59,remaining:8})).filter(r=>freeDecoration(r.x,r.z));
+    const resourceNames={wood:'Gỗ',stone:'Đá',fiber:'Sợi cỏ',clay:'Đất sét',herb:'Thảo dược',ore:'Quặng'};
+    const resources=state?.resources||Array.from({length:144},(_,i)=>({id:`preview-${i}`,type:['stone','fiber','wood','herb','ore'][i%5],x:2+(i*17)%91,z:2+(i*29)%91,remaining:8})).filter(r=>freeDecoration(r.x,r.z));
     for(const [i,r] of resources.entries()){
       if(state)this.targets.push({id:r.id,x:r.x,z:r.z,label:`${resourceNames[r.type]||r.type} · ${r.remaining}${r.remaining<=0?` · hồi phục ${Math.round((r.regrowth||0)*100)}%`:''}`});
       if(r.remaining<=0){
@@ -328,8 +331,12 @@ export class Map2D {
         if(freeDecoration(x,z)&&!(state?.buildings||[]).some(b=>Math.hypot(b.x-x,b.z-z)<1))objects.push({id:r.id,kind:'wood',x,z,seed:i+j,small:true});
       }
     }
-    const buildingNames={house:'Nhà nhỏ',storehouse:'Kho cá nhân',field:'Ruộng canh tác',pasture:'Chuồng chăn nuôi'};
-    for(const b of state?.buildings||[]){this.targets.push({id:b.id,x:b.x,z:b.z,label:buildingNames[b.kind]||b.kind});objects.push({id:b.id,kind:b.kind==='field'?'field':b.kind==='pasture'?'pasture':'house',x:b.x,z:b.z,variant:b.kind==='storehouse'?1:0,progress:b.progress||0,animals:b.animals||0});}
+    const buildingNames={house:'Nhà nhỏ',storehouse:'Kho cá nhân',field:'Ruộng canh tác',pasture:'Chuồng chăn nuôi',lumberyard:'Trại lâm nghiệp',quarry:'Mỏ khai thác',workshop:'Xưởng công cụ',canal:'Kênh dẫn nước',marketstall:'Quầy giao thương'};
+    for(const b of state?.buildings||[]){
+      this.targets.push({id:b.id,x:b.x,z:b.z,label:buildingNames[b.kind]||b.kind});
+      const visualKind=['field','pasture','quarry','canal','marketstall','lumberyard'].includes(b.kind)?b.kind:'house';
+      objects.push({id:b.id,kind:visualKind,x:b.x,z:b.z,variant:['storehouse','workshop'].includes(b.kind)?1:0,progress:b.progress||0,animals:b.animals||0});
+    }
     if(cart){
       const x=Number.isFinite(cart.x)?cart.x:11,z=Number.isFinite(cart.z)?cart.z:19;
       objects.push({...cart,id:'depot',kind:'cart',x,z});
@@ -343,7 +350,7 @@ export class Map2D {
       const commute=day<.18?0:day<.28?(day-.18)/.1:day<.7?1:day<.82?1-(day-.7)/.12:0;
       const eased=commute*commute*(3-2*commute),idle=time?Math.sin(time*.8+i)*.04:0;
       const x=home.x+(work.x-home.x)*eased+idle,z=home.z+(work.z-home.z)*eased;
-      const role=n.job==='Đánh cá'?'fisher':'farmer';
+      const role=n.job==='Đánh cá'?'fisher':n.job==='Chăn nuôi'?'keeper':n.job==='Thợ thủ công'?'builder':n.job==='Buôn bán'?'connector':'farmer';
       this.targets.push({id:n.id,x,z,label:`${n.name} · ${eased>.75?(n.activity||n.job):n.job}${n.hungryDays>0?' · Thiếu ăn':''}`});
       objects.push({id:n.id,kind:'person',x,z,color:n.hungryDays>2?'#a58468':role==='fisher'?'#79a1a0':'#b58b54',seed:i,role,hungry:n.hungryDays>0});
     }
@@ -370,9 +377,15 @@ export class Map2D {
       else if(o.kind==='stone')this.stone(c,x,y,o.seed);
       else if(o.kind==='clay'){rect(c,x-10,y-5,21,8,'#76533f');rect(c,x-7,y-10,15,8,'#a67555');rect(c,x-3,y-12,8,4,'#c18b65');}
       else if(o.kind==='fiber'){for(let j=0;j<7;j++){rect(c,x-8+j*3,y-11-(j%3),1,12+(j%3),'#496d3f');rect(c,x-9+j*3,y-10-(j%2)*3,3,3,'#8ead59');}}
+      else if(o.kind==='herb'){for(let j=0;j<6;j++){rect(c,x-8+j*3,y-8-(j%2)*2,2,9,'#426b4e');rect(c,x-9+j*3,y-10-(j%2)*2,4,3,j%2?'#ba8cae':'#d5b36a');}}
+      else if(o.kind==='ore'){this.stone(c,x,y,o.seed);rect(c,x-5,y-11,4,3,'#8fb0bd');rect(c,x+2,y-7,3,4,'#d0a96e');}
       else if(o.kind==='house')this.house(c,x,y,o.variant,o.tiny);
       else if(o.kind==='field'){rect(c,x-13,y-13,27,22,'#6b5b38');for(let j=0;j<4;j++){rect(c,x-11,y-10+j*5,23,2,'#b49752');for(let k=0;k<5;k++)rect(c,x-9+k*5,y-13+j*5,2,5,o.progress>.55?'#c6b454':'#6f984b');}}
       else if(o.kind==='pasture'){rect(c,x-13,y-12,27,21,'#749453');for(let j=0;j<5;j++){rect(c,x-13+j*6,y-13,2,23,'#d0b678');}rect(c,x-13,y-13,27,2,'#d0b678');rect(c,x-13,y+8,27,2,'#d0b678');for(let j=0;j<Math.min(4,o.animals);j++){rect(c,x-9+j*6,y-5+(j%2)*6,5,4,'#e2ddbd');rect(c,x-5+j*6,y-4+(j%2)*6,2,2,'#776d55');}}
+      else if(o.kind==='quarry'){rect(c,x-14,y-10,29,18,'#6c735f');this.stone(c,x-5,y-1,3);this.stone(c,x+7,y+3,5);}
+      else if(o.kind==='canal'){rect(c,x-13,y-8,27,15,'#817458');rect(c,x-13,y-4,27,7,'#4a9ba7');rect(c,x-13,y-5,27,2,'#b7af78');rect(c,x-13,y+3,27,2,'#b7af78');}
+      else if(o.kind==='marketstall'){rect(c,x-12,y-9,25,17,'#755744');rect(c,x-14,y-15,29,8,'#c68752');for(let j=0;j<5;j++)rect(c,x-13+j*7,y-15,4,8,j%2?'#e0c17c':'#9f5d49');}
+      else if(o.kind==='lumberyard'){rect(c,x-14,y-10,29,18,'#85704a');for(let j=0;j<4;j++){rect(c,x-11,y-8+j*4,22,3,'#8d603e');rect(c,x-9,y-8+j*4,2,3,'#c29157');}}
       else if(o.kind==='ruin')this.ruin(c,x,y);
       else if(o.kind==='person')this.person(c,x,y,o.color,o.you,time&&(!o.player||o.moving)?Math.floor(time*(o.player?7:1.2)+(o.seed||0))%2:0,o.role,o.hungry);
       else if(o.kind==='cart')this.cart(c,x,y,o,time);
@@ -402,7 +415,7 @@ export class Map2D {
         const [x,y]=this.project(p[1],p[2]+2),population=state?.npcs?.filter(n=>n.village===id).length;
         this.label(p[3]+(population!==undefined?` · ${population}`:''),x,y,false,true);
       }
-      for(const id of ['market','mistwood','highland','farreach']){
+      for(const id of ['market','mistwood','highland','farreach','marsh','ashlands','frostlands']){
         const p=LANDMARKS.find(t=>t[0]===id);if(selected===id)continue;
         const [x,y]=this.project(p[1],p[2]+1.7);this.label(p[3],x,y,false,false);
       }
