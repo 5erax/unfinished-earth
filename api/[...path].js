@@ -1,12 +1,9 @@
 const ORIGIN = "https://unfinished-earth-playtest.dha260803.chatgpt.site";
 
 export default async function handler(req, res) {
-  const suffix = Array.isArray(req.query.path) ? req.query.path.join("/") : req.query.path || "";
-  const target = new URL(`/api/${suffix}`, ORIGIN);
-  for (const [key, value] of Object.entries(req.query)) {
-    if (key === "path") continue;
-    for (const item of Array.isArray(value) ? value : [value]) target.searchParams.append(key, item);
-  }
+  const incoming = new URL(req.url, "https://vercel.local");
+  const suffix = incoming.pathname.replace(/^\/api\/?/, "");
+  const target = new URL(`/api/${suffix}${incoming.search}`, ORIGIN);
   const headers = {
     "content-type": req.headers["content-type"] || "application/json",
     "oai-sites-authorization": `Bearer ${process.env.SITES_BYPASS_TOKEN || ""}`,
