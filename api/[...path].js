@@ -13,6 +13,15 @@ export default async function handler(req, res) {
   if (!["GET", "HEAD"].includes(req.method)) init.body = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {});
   const upstream = await fetch(target, init);
   res.status(upstream.status);
-  for (const [key, value] of upstream.headers) if (!["content-encoding","content-length","transfer-encoding"].includes(key)) res.setHeader(key, value);
+  for (const [key, value] of upstream.headers) {
+    if (!["content-encoding", "content-length", "transfer-encoding", "set-cookie"].includes(key)) {
+      res.setHeader(key, value);
+    }
+  }
+  const cookies = upstream.headers.getSetCookie?.() || [];
+  const sessionCookies = cookies
+    .filter((cookie) => cookie.startsWith("earth_session="))
+    .map((cookie) => cookie.replace(/;\s*Domain=[^;]+/i, ""));
+  if (sessionCookies.length) res.setHeader("Set-Cookie", sessionCookies);
   res.send(Buffer.from(await upstream.arrayBuffer()));
 }
