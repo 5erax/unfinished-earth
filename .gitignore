@@ -28,3 +28,6 @@ backups/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+.vercel
+public/world-rules.js
+public/three.js
