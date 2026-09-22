@@ -25,6 +25,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install Vercel build package manager
+        run: npm install --global pnpm@10.17.1
       - name: Pull Vercel configuration
         run: npx vercel@59.25.0 pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
       - name: Build production artifact
